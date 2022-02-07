@@ -265,6 +265,8 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 	inserter.offset_to_label = creator.offset_to_label;
 	ast->accept(&inserter);
 
+	return ast;	
+	
 	block::loop_finder finder;
 	finder.ast = ast;
 	ast->accept(&finder);
@@ -366,10 +368,17 @@ block::stmt::Ptr builder_context::extract_ast_from_function_internal(std::vector
 		add_stmt_to_current_block(goto_stmt, false);
 		ret_ast = ast;
 	} catch (MemoizationException &e) {
+		/*
 		for (unsigned int i = e.child_id; i < e.parent->stmts.size();
 		     i++) {
 			add_stmt_to_current_block(e.parent->stmts[i], false);
 		}
+		*/
+		// Instead of copying statements to the current block, we will just insert a goto
+		block::goto_stmt::Ptr goto_stmt = std::make_shared<block::goto_stmt>();
+		goto_stmt->static_offset.clear();
+		goto_stmt->temporary_label_number = e.static_offset;
+		add_stmt_to_current_block(goto_stmt, false);
 		ret_ast = ast;
 	}
 
