@@ -21,5 +21,17 @@ $(BUILD_DIR)/sample%: $(BUILD_DIR)/samples/sample%.o $(LIBRARY) $(DEPS_LIST)
 	@mkdir -p $(@D)
 	$(CXXLDV) -o $@ $< $(LINKER_FLAGS)
 
+.PHONY: fuzzer
+fuzzer: $(BUILD_DIR)/fuzzer
+
+$(BUILD_DIR)/tests/fuzzer.o: $(TEST_DIR)/fuzzer.cpp $(INCLUDES) $(DEPS_LIST)
+	@mkdir -p $(@D)
+	$(CXXV) $(CFLAGS_INTERNAL) $(CFLAGS) $< -o $@ $(INCLUDE_FLAGS) -c	
+
+$(BUILD_DIR)/fuzzer: $(BUILD_DIR)/tests/fuzzer.o $(LIBRARY) $(DEPS_LIST)
+	@mkdir -p $(@D)
+	$(CXXLDV) -o $@ $< $(LINKER_FLAGS)
+
+
 .PHONY: executables
 executables: $(SAMPLES)

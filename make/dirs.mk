@@ -5,6 +5,7 @@ SRC_DIR=$(BASE_DIR)/src
 BUILD_DIR?=$(BASE_DIR)/build
 INCLUDE_DIR=$(BASE_DIR)/include
 SAMPLES_DIR=$(BASE_DIR)/samples
+TEST_DIR=$(BASE_DIR)/tests
 DEPS_DIR=$(BASE_DIR)/deps
 SAMPLES_SRCS=$(wildcard $(SAMPLES_DIR)/*.cpp)
 SAMPLES=$(subst $(SAMPLES_DIR),$(BUILD_DIR),$(SAMPLES_SRCS:.cpp=))
