@@ -1,0 +1,60 @@
+void test (void) {
+  int var0 = 71;
+  int var1 = 98;
+  int var2 = 18;
+  int var3 = 46;
+  int var4 = 70;
+  if (var3 == var2) {
+    if (var4 >= var3) {
+      var0 = var2 + 72;
+      if (var1 > var1) {
+        if (var3 > var0) {
+          var2 = var0 + 43;
+          var3 = var0 + 78;
+        } 
+        if (var1 < var4) {
+          var0 = var3 + 97;
+        } else {
+          var2 = var3 + 86;
+          var3 = var0 + 33;
+          var0 = var3 + 45;
+        }
+        if (var2 > var0) {
+          var1 = var3 + 23;
+        } else {
+          var4 = var4 + 50;
+          var3 = var1 + 40;
+        }
+      } else {
+        while (var1 >= var0) {
+          var1 = var0 + 46;
+          var4 = var3 + 11;
+        }
+      }
+    } else {
+      if (var2 < var4) {
+        var1 = var0 + 67;
+        if (var0 >= var2) {
+        } 
+        if (var3 <= var2) {
+        } 
+      } else {
+        if (var3 != var0) {
+          var3 = var0 + 37;
+          var3 = var0 + 67;
+        } else {
+          var0 = var1 + 62;
+          var0 = var1 + 48;
+        }
+      }
+    }
+    while (var4 < var4) {
+      if (var1 != var2) {
+        if (var2 >= var0) {
+        } 
+      } 
+    }
+  } 
+  var2 = var2 + 50;
+}
+

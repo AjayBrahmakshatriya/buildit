@@ -1,0 +1,23 @@
+void test (void) {
+  int var0 = 89;
+  int var1 = 15;
+  int var2 = 21;
+  int var3 = 59;
+  int var4 = 78;
+  while (var4 < var1) {
+    var1 = var1 + 49;
+  }
+  if (var3 < var0) {
+    var2 = var3 + 50;
+    if (var4 <= var1) {
+      while (var0 > var2) {
+      }
+    } else {
+      var4 = var4 + 95;
+    }
+  } 
+  if (var2 < var4) {
+    var1 = var1 + 43;
+  } 
+}
+

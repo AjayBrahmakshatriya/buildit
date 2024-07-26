@@ -1,0 +1,16 @@
+void test (void) {
+  int var0 = 76;
+  int var1 = 95;
+  int var2 = 85;
+  int var3 = 53;
+  int var4 = 35;
+  var0 = var0 + 69;
+  var1 = var4 + 3;
+  if (var2 > var0) {
+    var0 = var4 + 72;
+  } else {
+    var0 = var3 + 34;
+    var4 = var0 + 39;
+  }
+}
+

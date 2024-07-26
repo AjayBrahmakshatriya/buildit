@@ -1,0 +1,9 @@
+void test (void) {
+  int var0 = 62;
+  int var1 = 91;
+  int var2 = 15;
+  int var3 = 76;
+  int var4 = 28;
+  var0 = var0 + 67;
+}
+

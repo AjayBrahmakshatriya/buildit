@@ -25,7 +25,15 @@ static void bar(void) {
 
     dyn_var<int> b = a;
     b++;
-     
+
+
+    if(x < y) {
+	while(1) {
+		a++;
+		if (!(x < y)) 
+			break;
+	}
+    }
      
 }
 
