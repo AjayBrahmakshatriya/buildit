@@ -48,6 +48,18 @@ void c_code_generator::visit(not_expr::Ptr a) {
 	oss << ")";
 }
 
+void c_code_generator::visit(unary_minus_expr::Ptr a) {
+	oss << "-(";
+	a->expr1->accept(this);
+	oss << ")";
+}
+
+void c_code_generator::visit(bitwise_not_expr::Ptr a) {
+	oss << "~(";
+	a->expr1->accept(this);
+	oss << ")";
+}
+
 static bool expr_needs_bracket(expr::Ptr a) {
 	if (isa<binary_expr>(a))
 		return true;
@@ -81,6 +93,9 @@ void c_code_generator::visit(or_expr::Ptr a) {
 }
 void c_code_generator::visit(bitwise_or_expr::Ptr a) {
 	emit_binary_expr(a, "|");
+}
+void c_code_generator::visit(bitwise_xor_expr::Ptr a) {
+	emit_binary_expr(a, "^");
 }
 void c_code_generator::visit(plus_expr::Ptr a) {
 	emit_binary_expr(a, "+");
@@ -217,6 +232,9 @@ void c_code_generator::visit(scalar_type::Ptr type) {
 		break;
 	case scalar_type::DOUBLE_TYPE:
 		oss << "double";
+		break;
+	case scalar_type::BOOL_TYPE:
+		oss << "bool";
 		break;
 	default:
 		assert(false && "Invalid scalar type");
