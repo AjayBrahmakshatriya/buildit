@@ -356,6 +356,8 @@ void c_code_generator::visit(decl_stmt::Ptr a) {
 	// if (a->decl_var->hasMetadata<int>("escapes_static_scope")) oss << " //" << "escapes_static_scope = 1";
 }
 void c_code_generator::visit(if_stmt::Ptr a) {
+	oss << "// " << a->cond->static_offset.stringify() << std::endl;
+	printer::indent(oss, curr_indent);
 	oss << "if (";
 	a->cond->accept(this);
 	oss << ")";
@@ -544,8 +546,13 @@ void c_code_generator::visit(func_decl::Ptr a) {
 }
 void c_code_generator::visit(goto_stmt::Ptr a) {
 	// a->dump(oss, 1);
+	oss << "// " << a->label1->static_offset.stringify() << std::endl;
+	printer::indent(oss, curr_indent);
+	oss << "// " << a->temporary_label_number.stringify() << std::endl;
+	printer::indent(oss, curr_indent);
 	oss << "goto ";
 	oss << a->label1->label_name << ";";
+	oss << " // " << a;
 }
 void c_code_generator::visit(label_stmt::Ptr a) {
 	oss << a->label1->label_name << ":";

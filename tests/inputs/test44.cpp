@@ -34,7 +34,7 @@ void test (void) {
       }
       var4 = var1 + 64;
       while (var3 >= var4) {
-        if (!(var1 >= var1)) {
+        if (!(var1 >= var2)) {
           break;
         } 
       }

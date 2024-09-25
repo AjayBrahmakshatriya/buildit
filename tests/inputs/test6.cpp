@@ -17,7 +17,7 @@ void test (void) {
         } 
       } 
       if (var4 >= var0) {
-        while (var3 < var3) {
+        while (var3 < var4) {
         }
         while (var2 <= var0) {
           var0 = var2 + 81;
@@ -34,7 +34,7 @@ void test (void) {
       var0 = var0 + 5;
       var4 = var0 + 37;
     } else {
-      while (var1 >= var1) {
+      while (var1 >= var2) {
       }
       if (var4 > var1) {
         var3 = var0 + 47;

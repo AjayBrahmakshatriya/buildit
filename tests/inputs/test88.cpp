@@ -11,7 +11,7 @@ void test (void) {
   var3 = var0 + 17;
   if (var2 == var3) {
     var4 = var4 + 82;
-    while (var4 != var4) {
+    while (var4 != var0) {
       if (var3 > var1) {
         if (var1 != var4) {
         } 
@@ -28,7 +28,7 @@ void test (void) {
       if (var1 <= var3) {
         while (var4 <= var1) {
         }
-        while (var2 >= var2) {
+        while (var2 >= var3) {
         }
         while (var1 <= var0) {
         }
@@ -38,7 +38,7 @@ void test (void) {
       var4 = var3 + 42;
     } 
   } else {
-    if (var1 <= var1) {
+    if (var1 <= var2) {
       var0 = var3 + 89;
     } else {
       while (var1 != var4) {
@@ -49,7 +49,7 @@ void test (void) {
           var1 = var3 + 75;
           var3 = var4 + 11;
         } 
-        while (var4 == var4) {
+        while (var4 == var0) {
         }
       } else {
         if (var3 != var1) {
@@ -57,7 +57,7 @@ void test (void) {
         var0 = var1 + 10;
         var2 = var1 + 88;
       }
-      while (var4 > var4) {
+      while (var4 > var0) {
         var1 = var3 + 8;
       }
     }

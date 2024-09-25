@@ -306,6 +306,8 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 	if (feature_unstructured)
 		return ast;
 
+	return ast;
+
 	block::basic_block::cfg_block BBs = generate_basic_blocks(block::to<block::stmt_block>(ast));
 	
 	block::loop_finder finder;

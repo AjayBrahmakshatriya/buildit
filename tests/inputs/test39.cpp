@@ -10,17 +10,17 @@ void test (void) {
   while (var1 <= var0) {
     var2 = var3 + 95;
   }
-  if (var4 >= var4) {
-    if (var0 != var0) {
+  if (var4 >= var0) {
+    if (var0 != var1) {
       if (var3 <= var2) {
-        while (var2 < var2) {
+        while (var2 < var3) {
         }
       } else {
-        if (var1 >= var1) {
+        if (var1 >= var2) {
           var1 = var4 + 16;
           var2 = var3 + 85;
         } 
-        while (var4 >= var4) {
+        while (var4 >= var0) {
         }
         var2 = var1 + 38;
       }

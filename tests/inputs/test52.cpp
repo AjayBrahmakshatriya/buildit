@@ -7,13 +7,13 @@ void test (void) {
   builder::dyn_var<int> var2 = 98;
   builder::dyn_var<int> var3 = 42;
   builder::dyn_var<int> var4 = 44;
-  while (var0 == var0) {
+  while (var0 == var1) {
     var3 = var3 + 89;
     var2 = var2 + 55;
   }
   if (var0 != var3) {
     if (var1 < var0) {
-      while (var4 > var4) {
+      while (var4 > var0) {
       }
     } 
     while (var1 != var4) {

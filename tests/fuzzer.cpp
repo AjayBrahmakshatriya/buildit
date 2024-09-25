@@ -30,6 +30,23 @@ static expr::Ptr sample_variable(const sctx &ctx) {
 	return ve;
 }
 
+
+static std::pair<expr::Ptr, expr::Ptr> sample_variable_pair(const sctx &ctx) {
+	unsigned int idx1 = gen_random(ctx.var_set.size());
+	unsigned int idx2 = gen_random(ctx.var_set.size());
+	if (idx2 == idx1) {
+		idx2 = (idx2 + 1) % ctx.var_set.size();
+	}
+
+	var_expr::Ptr ve1 = std::make_shared<var_expr>();	
+	ve1->var1 = ctx.var_set[idx1];
+	var_expr::Ptr ve2 = std::make_shared<var_expr>();	
+	ve2->var1 = ctx.var_set[idx2];
+
+	return {ve1, ve2};
+}
+
+
 static expr::Ptr generate_assignment(const sctx &ctx) {
 	expr::Ptr lhs = sample_variable(ctx);
 	expr::Ptr rhs = sample_variable(ctx);
@@ -60,8 +77,11 @@ static binary_expr::Ptr gen_comparison_operator(void) {
 }
 
 static expr::Ptr generate_comparison(const sctx& ctx) {
-	expr::Ptr lhs = sample_variable(ctx);
-	expr::Ptr rhs = sample_variable(ctx);
+	//expr::Ptr lhs = sample_variable(ctx);
+	//expr::Ptr rhs = sample_variable(ctx);
+	auto exprs = sample_variable_pair(ctx);
+	expr::Ptr lhs = exprs.first;
+	expr::Ptr rhs = exprs.second;
 	
 	binary_expr::Ptr be = gen_comparison_operator();
 	be->expr1 = lhs;

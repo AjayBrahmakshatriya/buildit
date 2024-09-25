@@ -12,7 +12,7 @@ void test (void) {
       while (var4 < var1) {
         var3 = var1 + 61;
       }
-      if (var2 <= var2) {
+      if (var2 <= var3) {
         if (var2 <= var4) {
         } 
       } else {

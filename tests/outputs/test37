@@ -17,7 +17,7 @@ void test (void) {
         }
       }
       if (var3 != var2) {
-        if (var4 < var4) {
+        if (var4 < var0) {
           var4 = var4 + 32;
           var3 = var0 + 87;
         } 

@@ -1,6 +1,7 @@
 #ifndef LABEL_INSERTER_H
 #define LABEL_INSERTER_H
 #include "blocks/block_visitor.h"
+#include "blocks/block_replacer.h"
 #include "blocks/stmt.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -20,9 +21,9 @@ public:
 	int current_label = 0;
 	virtual void visit(stmt_block::Ptr);
 };
-class label_inserter : public block_visitor {
+class label_inserter : public block_replacer {
 public:
-	using block_visitor::visit;
+	using block_replacer::visit;
 
 	// The main table to hold static tag to label mapping
 	// this table holds the jump target that is in the parent of the

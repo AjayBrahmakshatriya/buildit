@@ -11,7 +11,7 @@ void test (void) {
   if (var2 != var4) {
     var2 = var1 + 57;
     if (var2 <= var0) {
-      while (var2 != var2) {
+      while (var2 != var3) {
         if (var4 <= var3) {
         } 
         if (!(var3 != var2)) {

@@ -8,14 +8,14 @@ void test (void) {
   builder::dyn_var<int> var3 = 98;
   builder::dyn_var<int> var4 = 66;
   var4 = var0 + 72;
-  if (var3 > var3) {
-    if (var3 != var3) {
-      while (var3 <= var3) {
+  if (var3 > var4) {
+    if (var3 != var4) {
+      while (var3 <= var4) {
       }
       if (var3 < var4) {
         var3 = var2 + 66;
         var0 = var0 + 9;
-        if (var0 <= var0) {
+        if (var0 <= var1) {
           var2 = var4 + 54;
           var4 = var4 + 49;
         } 

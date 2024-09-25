@@ -23,7 +23,7 @@ void test (void) {
     var1 = var2 + 67;
     while (var1 != var2) {
       if (var1 >= var2) {
-        if (var1 != var1) {
+        if (var1 != var2) {
           var2 = var0 + 65;
         } 
         break;

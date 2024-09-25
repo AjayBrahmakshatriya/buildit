@@ -10,7 +10,7 @@ void test (void) {
   while (var2 == var1) {
     var3 = var0 + 62;
   }
-  while (var0 > var0) {
+  while (var0 > var1) {
     var2 = var2 + 79;
   }
   var2 = var2 + 90;

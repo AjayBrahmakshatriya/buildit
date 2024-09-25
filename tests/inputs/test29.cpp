@@ -13,12 +13,12 @@ void test (void) {
     var0 = var1 + 81;
   } else {
     var3 = var2 + 1;
-    while (var1 <= var1) {
+    while (var1 <= var2) {
       var1 = var0 + 77;
     }
   }
   while (var0 < var4) {
-    if (var3 >= var3) {
+    if (var3 >= var4) {
       while (var0 > var1) {
         var0 = var0 + 50;
       }

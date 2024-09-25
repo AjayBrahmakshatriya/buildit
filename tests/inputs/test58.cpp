@@ -7,7 +7,7 @@ void test (void) {
   builder::dyn_var<int> var2 = 20;
   builder::dyn_var<int> var3 = 35;
   builder::dyn_var<int> var4 = 2;
-  if (var2 >= var2) {
+  if (var2 >= var3) {
     var4 = var2 + 93;
   } 
 }

@@ -16,7 +16,7 @@ void test (void) {
     } 
   } else {
     while (var3 > var0) {
-      if (var3 == var3) {
+      if (var3 == var4) {
         if (var4 <= var3) {
           var0 = var3 + 21;
         } 

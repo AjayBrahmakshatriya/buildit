@@ -4,7 +4,7 @@ void test (void) {
   int var2 = 99;
   int var3 = 30;
   int var4 = 6;
-  while (var0 > var0) {
+  while (var0 > var1) {
   }
 }
 
