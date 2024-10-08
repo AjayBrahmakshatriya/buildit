@@ -21,9 +21,9 @@ public:
 	int current_label = 0;
 	virtual void visit(stmt_block::Ptr);
 };
-class label_inserter : public block_replacer {
+class label_inserter : public block_visitor {
 public:
-	using block_replacer::visit;
+	using block_visitor::visit;
 
 	// The main table to hold static tag to label mapping
 	// this table holds the jump target that is in the parent of the

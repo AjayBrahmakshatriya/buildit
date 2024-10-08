@@ -7,6 +7,9 @@
 #include "blocks/rce.h"
 #include "blocks/sub_expr_cleanup.h"
 #include "blocks/var_namer.h"
+#include "blocks/loop_unpeeler.h"
+#include "blocks/loopback_cleanup.h"
+#include "blocks/if_trimmer.h"
 #include "builder/builder.h"
 #include "builder/dyn_var.h"
 #include "builder/exceptions.h"
@@ -286,6 +289,7 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 
 	block::var_namer::name_vars(ast);
 
+
 	block::label_collector collector;
 	ast->accept(&collector);
 
@@ -297,6 +301,10 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 	inserter.backup_offset_to_label = creator.offset_to_label;
 	inserter.feature_unstructured = feature_unstructured;
 	ast->accept(&inserter);
+
+	block::loopback_cleanup lpcleaner;
+	ast->accept(&lpcleaner);
+
 
 	// At this point it is safe to remove statements that are
 	// marked for deletion
@@ -310,7 +318,6 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 	if (feature_unstructured)
 		return ast;
 
-	return ast;
 
 	block::basic_block::cfg_block BBs = generate_basic_blocks(block::to<block::stmt_block>(ast));
 	
@@ -327,6 +334,12 @@ block::stmt::Ptr builder_context::extract_ast_from_function_impl(void) {
 
 	block::loop_roll_finder loop_roll_finder;
 	ast->accept(&loop_roll_finder);
+
+	block::loop_unpeeler unpeeler;
+	ast->accept(&unpeeler);
+
+	block::if_trimmer trimmer;
+	ast->accept(&trimmer);
 
 	return ast;
 }
