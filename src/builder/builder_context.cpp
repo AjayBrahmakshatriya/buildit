@@ -11,6 +11,7 @@
 #include "builder/builder.h"
 #include "builder/dyn_var.h"
 #include "builder/exceptions.h"
+#include "builder/block_type_extractor.h"
 #include "util/tracer.h"
 #include <algorithm>
 
@@ -274,6 +275,7 @@ block::stmt::Ptr builder_context::extract_ast_from_lambda(std::function<void(voi
 void builder_context::reset_for_nd_failure() {
 	// Clear all shared_state
 	memoized_tags->map.clear();
+	gathered_struct_decls->clear();
 	// Clear per run state if any
 	uncommitted_sequence.clear();
 	ast = nullptr;
@@ -404,6 +406,8 @@ block::stmt::Ptr builder_context::extract_ast_from_function_internal(std::vector
 		true_context.feature_unstructured = feature_unstructured;
 		true_context.enable_d2x = enable_d2x;
 		true_context.nd_state_map = nd_state_map;
+		true_context.gathered_struct_decls = gathered_struct_decls;
+		true_context.gather_struct_decls = gathered_struct_decls;
 
 		std::vector<bool> true_bv;
 		true_bv.push_back(true);
@@ -419,6 +423,8 @@ block::stmt::Ptr builder_context::extract_ast_from_function_internal(std::vector
 		false_context.feature_unstructured = feature_unstructured;
 		false_context.enable_d2x = enable_d2x;
 		false_context.nd_state_map = nd_state_map;
+		false_context.gathered_struct_decls = gathered_struct_decls;
+		false_context.gather_struct_decls = gathered_struct_decls;
 
 		std::vector<bool> false_bv;
 		false_bv.push_back(false);

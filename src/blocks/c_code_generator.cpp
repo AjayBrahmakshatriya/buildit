@@ -576,6 +576,14 @@ void c_code_generator::visit(struct_decl::Ptr a) {
 	oss << "};";
 	nextl();
 }
+void c_code_generator::visit(trans_unit::Ptr a) {
+	// For now, just spit all top level decls
+	// TODO: Change this to spit in order, struct decls, struct definitions, 
+	// global decls, global definitions
+	for (auto decl: a->top_level_decls) {
+		decl->accept(this);
+	}
+}
 void c_code_generator::visit(goto_stmt::Ptr a) {
 	// a->dump(oss, 1);
 	oss << "goto ";

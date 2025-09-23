@@ -430,6 +430,32 @@ public:
 	}
 };
 
+class trans_unit: public block {
+public:
+	typedef std::shared_ptr<trans_unit> Ptr;
+	virtual void dump(std::ostream&, int) override;
+	virtual void accept(block_visitor* a) override {
+		a->visit(self<trans_unit>());
+	}
+
+	std::vector<stmt::Ptr> top_level_decls;
+
+	virtual bool is_same(block::Ptr other) override {
+		// Equality of two trans units cannot be compared as 
+		// easily
+		assert(false && "Comparing equality of translation units not supported");
+		return false;
+	}	
+	virtual block::Ptr clone_impl(void) override {
+		auto np = clone_obj(this);
+		for (auto decl: top_level_decls) {
+			np->top_level_decls.push_back(clone(decl));
+		}	
+		return np;
+	}
+	
+};
+
 class return_stmt : public stmt {
 public:
 	typedef std::shared_ptr<return_stmt> Ptr;

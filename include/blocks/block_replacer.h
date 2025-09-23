@@ -91,6 +91,7 @@ public:
 
 	virtual void visit(std::shared_ptr<func_decl>) override;
 	virtual void visit(std::shared_ptr<struct_decl>) override;
+	virtual void visit(std::shared_ptr<trans_unit>) override;
 	virtual void visit(std::shared_ptr<return_stmt>) override;
 };
 } // namespace block

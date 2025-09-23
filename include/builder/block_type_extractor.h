@@ -3,7 +3,9 @@
 
 
 #include "builder/forward_declarations.h"
+#include "builder/builder_context.h"
 #include "builder/generics.h"
+#include "builder/dyn_var.h"
 #include <algorithm>
 
 namespace builder {
@@ -79,6 +81,31 @@ struct type_template<T, typename check_valid_type<decltype(external_type_namer<T
 	}
 };
 
+template <typename T>
+block::struct_decl::Ptr extract_struct_decl(void) {
+	auto save = options::track_members;
+	options::track_members = true;
+	dyn_var<T> v = with_name("_");
+	options::track_members = save;
+
+	// Construct a struct decl
+	auto sd = std::make_shared<block::struct_decl>();
+	auto var_type = dyn_var<T>::create_block_type();
+	assert(block::isa<block::named_type>(var_type) && "Cannot create struct declarations for un-named types");
+	assert(block::to<block::named_type>(var_type)->template_args.size() == 0 &&
+	       "Cannot yet, generate decls for types with template args");
+
+	sd->struct_name = block::to<block::named_type>(var_type)->type_name;
+	for (auto member: v.members) {
+		auto decl = std::make_shared<block::decl_stmt>();
+		decl->decl_var = member->block_var;
+		decl->init_expr = nullptr;
+		sd->members.push_back(decl);
+	}
+	return sd;
+}
+
+
 // The main definition of the type extractor classes
 template <typename T>
 class type_extractor {
@@ -86,11 +113,23 @@ public:
 	// This implementation is currenty only used
 	// by custom types which are derived from custom_type_base
 	static block::type::Ptr extract_type(void) {
-		//static_assert(std::is_base_of<custom_type_base, T>::value,
-			      //"Custom types should inherit from builder::custom_type_base");
 		block::named_type::Ptr type = std::make_shared<block::named_type>();
 		type->type_name = type_namer<T>::get_type_name();
 		type->template_args = type_template<T>::get_templates();
+
+		if (builder_context::current_builder_context != nullptr) {
+			if (builder_context::current_builder_context->gather_struct_decls) {
+				auto map = builder_context::current_builder_context->gathered_struct_decls;
+				// For now, assume types being extracted don't have template args	
+				// TODO: use a combination of name and template args to deduplicate
+				// extracted struct decls
+				if (map->find(type->type_name) == map->end()) {
+					auto sd = extract_struct_decl<T>();
+					(*map)[type->type_name] =  sd;
+				}
+			}
+		}
+
 		return type;
 	}
 };
@@ -374,6 +413,7 @@ public:
 		type->return_type = type_extractor<r_type>::extract_type();
 		type->arg_types = extract_type_vector_dyn<a_types...>();
 		std::reverse(type->arg_types.begin(), type->arg_types.end());
+		//type->arg_types = std::vector<block::type::Ptr>({type_extractor<a_types>::extract_type()...});
 		return type;
 	}
 };
@@ -410,6 +450,19 @@ public:
 		return type;
 	}
 };
+
+
+// Finally declare the create_block_type function
+
+template <typename T>
+block::type::Ptr dyn_var_impl<T>::create_block_type(void){
+	return type_extractor<T>::extract_type();
+}
+template <typename...Args>
+std::vector<block::type::Ptr> custom_type<Args...>::get_template_arg_types() {
+	return extract_type_from_args<Args...>::get_types();
+}
+
 
 } // namespace builder
 

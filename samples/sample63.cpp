@@ -32,7 +32,7 @@ static void bar(void) {
 }
 
 int main(int argc, char* argv[]) {
-	block::c_code_generator::generate_struct_decl<dyn_var<linked_list>>(std::cout);
+	block::c_code_generator::generate_struct_decl<linked_list>(std::cout);
 	builder::builder_context context;
 	auto ast = context.extract_function_ast(bar, "bar");
 	block::c_code_generator::generate_code(ast, std::cout, 0);

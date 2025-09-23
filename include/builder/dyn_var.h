@@ -3,6 +3,7 @@
 
 #include "builder/builder.h"
 #include "util/var_finder.h"
+#include "builder/generics.h"
 namespace builder {
 
 namespace options {
@@ -53,15 +54,13 @@ public:
 
 struct custom_type_base {
 	static std::vector<block::type::Ptr> get_template_arg_types() {
-		return extract_type_from_args<>::get_types();
+		return std::vector<block::type::Ptr>();
 	}
 };
 
 template <typename... Args>
 struct custom_type : custom_type_base {
-	static std::vector<block::type::Ptr> get_template_arg_types() {
-		return extract_type_from_args<Args...>::get_types();
-	}
+	static std::vector<block::type::Ptr> get_template_arg_types();
 };
 
 extern std::vector<var *> *parents_stack;
@@ -115,9 +114,7 @@ public:
 	}
 	
 
-	static block::type::Ptr create_block_type(void) {
-		return type_extractor<T>::extract_type();
-	}
+	static block::type::Ptr create_block_type(void);
 
 	void create_dyn_var(bool create_without_context = false) {
 		if (create_without_context) {

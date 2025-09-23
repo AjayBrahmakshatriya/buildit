@@ -10,6 +10,7 @@
 #include "blocks/stmt.h"
 #include "builder/dyn_var.h"
 #include "util/printer.h"
+#include "builder/block_type_extractor.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -82,6 +83,7 @@ public:
 	void handle_func_arg(var::Ptr a);
 	virtual void visit(func_decl::Ptr);
 	virtual void visit(struct_decl::Ptr);
+	virtual void visit(trans_unit::Ptr);
 	virtual void visit(return_stmt::Ptr);
 	virtual void visit(member_access_expr::Ptr);
 	virtual void visit(addr_of_expr::Ptr);
@@ -109,27 +111,7 @@ public:
 	}
 	template <typename T>
 	static void generate_struct_decl(std::ostream &oss, int indent = 0) {
-		static_assert(std::is_base_of<builder::var, T>::value, "Template argument should be a dyn_var");
-		auto save = builder::options::track_members;
-		builder::options::track_members = true;
-		T v = builder::with_name("_");
-		builder::options::track_members = save;
-
-		// Construct a struct decl
-		auto sd = std::make_shared<struct_decl>();
-		auto var_type = T::create_block_type();
-		assert(isa<named_type>(var_type) && "Cannot create struct declarations for un-named types");
-		assert(to<named_type>(var_type)->template_args.size() == 0 &&
-		       "Cannot yet, generate decls for types with template args");
-
-		sd->struct_name = to<named_type>(var_type)->type_name;
-		for (auto member: v.members) {
-			auto decl = std::make_shared<decl_stmt>();
-			decl->decl_var = member->block_var;
-			decl->init_expr = nullptr;
-			sd->members.push_back(decl);
-		}
-
+		auto sd = builder::extract_struct_decl<T>();
 		/* Dump the type */
 		c_code_generator generator(oss);
 		sd->accept(&generator);

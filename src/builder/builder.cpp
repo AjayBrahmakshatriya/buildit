@@ -1,6 +1,7 @@
 #include "builder/builder.h"
 #include "builder/builder_context.h"
 #include "builder/dyn_var.h"
+#include "builder/block_type_extractor.h"
 #include "util/tracer.h"
 
 namespace builder {

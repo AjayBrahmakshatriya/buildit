@@ -63,7 +63,7 @@ struct extract_signature<ClassType, RetType, typename std::enable_if<!filter_var
 							      RestArgTypes &...rest_args, TO &to,
 							      OtherArgs &...other_args) {
 				return extract_signature<ClassType, RetType, void, FutureArgTypes...>::template from<
-				    RestArgTypes..., TO &>::template with<OtherArgs &...>::call(context, arg_count + 1,
+				    RestArgTypes..., TO &>::template with<OtherArgs &...>::call(context, arg_count,
 												func, rest_args..., to,
 												other_args...);
 			}

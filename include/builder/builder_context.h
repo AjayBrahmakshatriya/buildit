@@ -79,6 +79,10 @@ public:
 	tag_map _internal_tags;
 	tag_map *memoized_tags;
 
+	std::unordered_map<std::string, block::struct_decl::Ptr> _gathered_struct_decls;
+	std::unordered_map<std::string, block::struct_decl::Ptr>* gathered_struct_decls = nullptr;
+	
+
 	// State shared across non-deterministic failures
 	std::unordered_map<std::string, std::shared_ptr<nd_var_gen_base>> *nd_state_map = nullptr;
 	std::unordered_map<std::string, std::shared_ptr<nd_var_gen_base>> _nd_state_map;
@@ -88,6 +92,7 @@ public:
 	// Some members are out of the scope of the executions and are never reset
 	std::vector<var *> assume_variables;
 	block::func_decl::Ptr current_func_decl;
+	
 
 	// Flags are just constants that shouldn't get updated anyway
 	// Flags for controlling BuildIt extraction
@@ -99,6 +104,7 @@ public:
 	std::string dynamic_compiler_flags = "";
 	std::string dynamic_header_includes = "";
 	bool enable_d2x = false;
+	bool gather_struct_decls = false;
 
 	bool is_visited_tag(tracer::tag &new_tag);
 	void erase_tag(tracer::tag &erase_tag);
@@ -109,6 +115,9 @@ public:
 		} else {
 			memoized_tags = _map;
 		}
+
+		gathered_struct_decls = &_gathered_struct_decls;
+
 		current_block_stmt = nullptr;
 		ast = nullptr;
 
@@ -136,6 +145,18 @@ public:
 		// The extract_signature_from_lambda will update the return type
 		current_func_decl->body = extract_ast_from_lambda(
 		    extract_signature_from_lambda<F, OtherArgs &...>::from(this, func_input, func_name, other_args...));
+
+		// If gathering struct decls, wrap the AST in TU and insert struct decls
+		if (gather_struct_decls) {
+			auto tu_ast = std::make_shared<block::trans_unit>();
+			for (auto decl: *gathered_struct_decls) {
+				tu_ast->top_level_decls.push_back(decl.second);
+			}
+			// Finally insert this function
+			tu_ast->top_level_decls.push_back(current_func_decl);
+			return current_func_decl;
+		}
+
 		return current_func_decl;
 	}
 

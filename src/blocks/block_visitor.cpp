@@ -201,6 +201,11 @@ void block_visitor::visit(struct_decl::Ptr a) {
 		mem->accept(this);
 }
 
+void block_visitor::visit(trans_unit::Ptr a) {
+	for (auto decl: a->top_level_decls) {
+		decl->accept(this);
+	}
+}
 void block_visitor::visit(return_stmt::Ptr a) {
 	a->return_val->accept(this);
 }

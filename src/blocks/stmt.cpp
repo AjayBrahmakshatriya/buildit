@@ -93,6 +93,13 @@ void struct_decl::dump(std::ostream &oss, int indent) {
 		mem->dump(oss, indent + 1);
 	}
 }
+void trans_unit::dump(std::ostream& oss, int indent ) {
+	printer::indent(oss, indent);
+	oss << "TRANSLATION_UNIT" << std::endl;
+	for (auto decl: top_level_decls) {
+		decl->dump(oss, indent + 1);
+	}
+}
 void return_stmt::dump(std::ostream &oss, int indent) {
 	printer::indent(oss, indent);
 	oss << "RETURN_STMT" << std::endl;

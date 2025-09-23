@@ -254,6 +254,14 @@ void block_replacer::visit(struct_decl::Ptr a) {
 	node = a;
 }
 
+void block_replacer::visit(trans_unit::Ptr a) {
+	for (unsigned int i = 0; i < a->top_level_decls.size(); i++) {
+		auto tmp = rewrite<stmt>(a->top_level_decls[i]);
+		a->top_level_decls.at(i) = tmp;
+	}
+	node = a;
+}
+
 void block_replacer::visit(return_stmt::Ptr a) {
 	a->return_val = rewrite(a->return_val);
 	node = a;

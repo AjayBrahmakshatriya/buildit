@@ -50,8 +50,8 @@ int main(int argc, char *argv[]) {
 	auto ast = context.extract_function_ast(bar, "my_bar");
 	ast->dump(std::cout, 0);
 
-	block::c_code_generator::generate_struct_decl<dyn_var<FooT>>(std::cout);
-	block::c_code_generator::generate_struct_decl<dyn_var<BarT<int>>>(std::cout);
+	block::c_code_generator::generate_struct_decl<FooT>(std::cout);
+	block::c_code_generator::generate_struct_decl<BarT<int>>(std::cout);
 
 	// Don't do this because this has a template in the generated type
 	// block::c_code_generator::generate_struct_decl<dyn_var<CarT<int, BarT<float>>>>(std::cout);

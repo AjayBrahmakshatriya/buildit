@@ -4,7 +4,6 @@
 #include "builder/forward_declarations.h"
 
 #include "blocks/var.h"
-#include "builder/block_type_extractor.h"
 #include "builder/builder_context.h"
 #include "builder/signature_extract.h"
 #include <algorithm>

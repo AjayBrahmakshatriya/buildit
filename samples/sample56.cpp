@@ -41,8 +41,8 @@ int main(int argc, char *argv[]) {
 	auto ast = context.extract_function_ast(bar, "bar");
 	ast->dump(std::cout, 0);
 
-	block::c_code_generator::generate_struct_decl<dyn_var<struct_type>>(std::cout);
-	block::c_code_generator::generate_struct_decl<dyn_var<my_type>>(std::cout);
+	block::c_code_generator::generate_struct_decl<struct_type>(std::cout);
+	block::c_code_generator::generate_struct_decl<my_type>(std::cout);
 	block::c_code_generator::generate_code(ast, std::cout, 0);
 	return 0;
 }

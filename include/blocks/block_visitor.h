@@ -67,6 +67,7 @@ class named_type;
 
 class func_decl;
 class struct_decl;
+class trans_unit;
 class return_stmt;
 
 class block_visitor {
@@ -135,6 +136,7 @@ public:
 
 	virtual void visit(std::shared_ptr<func_decl>);
 	virtual void visit(std::shared_ptr<struct_decl>);
+	virtual void visit(std::shared_ptr<trans_unit>);
 	virtual void visit(std::shared_ptr<return_stmt>);
 };
 } // namespace block
