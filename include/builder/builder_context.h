@@ -55,6 +55,16 @@ public:
 		return i_state.generated_func_decl;
 	}
 
+	template <typename F, typename...Args>
+	block::stmt::Ptr extract_function_ast_union(F func_input, std::string func_name, Args&&...args) {
+		invocation_state i_state = extract_signature_union<F>(func_input, std::forward<Args>(args)...);
+		i_state.b_ctx = this;	
+		// Set the name of the function 
+		i_state.generated_func_decl->func_name = func_name;
+		extract_function_ast_impl(&i_state);
+		return i_state.generated_func_decl;
+	}
+
 };
 
 

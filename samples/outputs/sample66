@@ -1,0 +1,42 @@
+int power1 (void) {
+  return 32768;
+}
+
+int power2 (int arg0) {
+  int var0 = 1;
+  int var1 = arg0;
+  var0 = var0 * arg0;
+  var1 = var1 * var1;
+  var0 = var0 * var1;
+  var1 = var1 * var1;
+  var0 = var0 * var1;
+  var1 = var1 * var1;
+  return var0 * var1;
+}
+
+int power3 (int arg0) {
+  int var0 = 1;
+  int var1 = 2;
+  while (arg0 > 1) {
+    if (arg0 % 2 == 1) {
+      var0 = var0 * var1;
+    } 
+    var1 = var1 * var1;
+    arg0 = arg0 / 2;
+  }
+  return var0 * var1;
+}
+
+int power4 (int arg0, int arg1) {
+  int var0 = 1;
+  int var1 = arg0;
+  while (arg1 > 1) {
+    if (arg1 % 2 == 1) {
+      var0 = var0 * var1;
+    } 
+    var1 = var1 * var1;
+    arg1 = arg1 / 2;
+  }
+  return var0 * var1;
+}
+

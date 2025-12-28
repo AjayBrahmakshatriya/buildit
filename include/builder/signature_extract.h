@@ -41,6 +41,15 @@ void create_return_stmt(const dyn_var<T>& a) {
 	get_run_state()->add_stmt_to_current_block(ret_stmt, true);
 }
 
+template <typename T>
+void create_return_stmt(const builder_union<T>& a) {
+	if (a.var_mode == builder_union<T>::STATIC) {
+		return create_return_stmt((dyn_var<T>)a.cval);
+	} else {
+		return create_return_stmt(a.var);
+	}
+}
+
 template <typename ProcessedArgTypes, typename RemainingArgTypes, typename ReturnType, typename Enable=void>
 struct extract_signature_impl {
 
@@ -158,6 +167,49 @@ invocation_state extract_signature(F func, OtherArgs&&... args) {
 	extract_signature_impl<std::tuple<>, ArgTypes, ReturnType>::fill_invocation(&i_state, func, 0, std::forward<OtherArgs>(args)...);
 
 	return i_state;	
+}
+
+template <typename RetType, typename...ProcessedArgs>
+struct extract_signature_union_impl {
+	// 1. Case 1, next arg is placeholder 
+	template <typename F, typename...OtherParams>
+	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs, const placeholder& _, OtherParams&&...other_params) {
+		std::string arg_name = "arg" + std::to_string(arg_index);
+		auto var = std::make_shared<block::var>();	
+		var->var_name = arg_name;
+		var->var_type = nullptr; // Leave the type unfilled here, it will be filled when grabbed by the builder_union
+		var->static_offset = tracer::get_unique_tag(); // The static tag on the var_type will also be set later
+		i_state->generated_func_decl->args.push_back(var);
+		extract_signature_union_impl<RetType, ProcessedArgs..., std::tuple<with_block_var>>::fill_invocation(i_state, func, arg_index + 1, std::forward<ProcessedArgs>(pargs)..., std::tuple<with_block_var>(with_block_var(var)), std::forward<OtherParams>(other_params)...);	
+	}
+
+	// 2. Case 2, next arg is a concrete val, it can just be forwarded as it is
+	// Disable this if NextArg is placeholder
+	template <typename F, typename NextArg, typename...OtherParams>
+	static typename std::enable_if<!std::is_same<typename std::remove_reference<NextArg>::type, placeholder>::value>::type fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs, NextArg&& na, OtherParams&&...other_params) {
+		extract_signature_union_impl<RetType, ProcessedArgs..., std::tuple<NextArg>>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgs>(pargs)..., std::tuple<NextArg>(std::forward<NextArg>(na)), std::forward<OtherParams>(other_params)...);
+	}
+	// 3. Case 3, all args are done
+	template <typename F>
+	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs) {
+		// We can fallback to the implementation without union	
+		extract_signature_impl<std::tuple<ProcessedArgs...>, std::tuple<>, RetType>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgs>(pargs)...);
+	}
+};
+
+
+// For now we will use a separate interface and implementation for functions 
+// that use union types -- All input types should be builder_union/regular variables, no dyn_var
+template <typename F, typename...Args>
+invocation_state extract_signature_union(F func, Args&&...args) {
+	using ReturnType = typename f_type_helper<F>::ret_type;
+
+	auto func_decl = std::make_shared<block::func_decl>();
+	invocation_state i_state;
+	i_state.generated_func_decl = func_decl;
+	
+	extract_signature_union_impl<ReturnType>::fill_invocation(&i_state, func, 0, std::forward<Args>(args)...);
+	return i_state;
 }
 
 }

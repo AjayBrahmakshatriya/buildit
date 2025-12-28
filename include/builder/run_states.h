@@ -181,8 +181,14 @@ public:
 	template <typename F, typename...OtherArgs>
 	friend invocation_state extract_signature(F func, OtherArgs&&... args);
 
+	template <typename F, typename...Args>
+	friend invocation_state extract_signature_union(F func, Args&&...args);
+
 	template <typename ProcessedArgTypes, typename RemainingArgTypes, typename ReturnType, typename Enable>
 	friend struct extract_signature_impl;
+
+	template <typename RetType, typename...ProcessedArgs>
+	friend struct extract_signature_union_impl;
 
 	template <typename T, typename...Args>
 	friend std::shared_ptr<T> get_or_create_generator(tracer::tag req_tag, Args&&...args);

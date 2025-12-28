@@ -360,6 +360,7 @@ public:
 	// Some constructors and operators that need to be defined
 	dyn_var(): dyn_var_impl<T>() {}
 	dyn_var(const dyn_var& other): dyn_var_impl<T>(other) {}	
+	dyn_var(const dyn_var&& other): dyn_var_impl<T>(std::move((dyn_var_impl<T>&)other)) {}
 	dyn_var<T>& operator=(const dyn_var<T>& other) {
 		return dyn_var_impl<T>::operator=(other);
 	}

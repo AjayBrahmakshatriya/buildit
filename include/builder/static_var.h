@@ -13,6 +13,9 @@ namespace builder {
 
 // Base class for all static vars
 class static_var_base {
+protected:
+	// Make this class truly abstract
+	static_var_base() = default;
 public:
 	mutable std::string var_name;
 	virtual std::string serialize() {
@@ -35,6 +38,7 @@ public:
 
 	T val;
 	bool is_deferred = false;
+	bool is_not_initialized = false;
 
 	mutable bool name_checked = false;
 
@@ -47,6 +51,8 @@ public:
 	}
 
 	static_var(const static_var &other) : static_var((T)other) {}
+	// Handle move constructor too
+	static_var(static_var&& other): static_var((T)other) {}
 
 	static_var &operator=(const static_var &other) {
 		try_get_name();
@@ -95,7 +101,9 @@ public:
 	static_var(const defer_init &) {
 		// Just like dynamic variables, no registration happens here
 		is_deferred = true;
+		is_not_initialized = true;
 	}
+
 	void deferred_init(void) {
 		// Deferred static variables are kept separate because they are never untracked
 		// in the destructor
@@ -104,17 +112,29 @@ public:
 		// TODO: Consider merging these two
 		get_run_state()->deferred_static_var_tuples.push_back(this);
 		try_get_name();
+		is_not_initialized = false;
 	}
 
 	~static_var() {
-		if (is_deferred) {
-			// Must be a deferred init object
+		// If it is deferred and is not initialized, 
+		// there is nothing to do
+		if (is_not_initialized) 
 			return;
-		}
+
+		// If it was deferred and being destroyed
+		// outside a run, again nothing to do
+		if (is_deferred && !is_under_run()) 
+			return;
 
 		auto r_state = get_run_state();
+		// By default remove from the static_var_tuples
+		auto tuples_queue = &(r_state->static_var_tuples);
+		if (is_deferred) {
+			// This would be in the deferred_list
+			tuples_queue = &(r_state->deferred_static_var_tuples);
+		}
 
-		assert(r_state->static_var_tuples.size() > 0);
+		assert(tuples_queue->size() > 0);
 		
 		/* Instead of assuming that the last variable is the static_var we are destroying,
 		   we find the appropriate one, remove it and replace it with nullptr. During tag creation
@@ -125,18 +145,18 @@ public:
 		This allows out of order destruction while still maintaining good static tags */
 		
 		int index = -1;
-		for (int i = r_state->static_var_tuples.size() - 1; i >= 0; i--) {
-			if (r_state->static_var_tuples[i] == this) {
+		for (int i = tuples_queue->size() - 1; i >= 0; i--) {
+			if ((*tuples_queue)[i] == this) {
 				index = i;
-				r_state->static_var_tuples[i] = nullptr;
+				(*tuples_queue)[i] = nullptr;
 				break;
 			}
 		}
 		assert(index != -1 && "Static variable to destroy not valid");
 
-		while (!r_state->static_var_tuples.empty() 
-			&& r_state->static_var_tuples.back() == nullptr) {
-			r_state->static_var_tuples.pop_back();
+		while (!tuples_queue->empty() 
+			&& tuples_queue->back() == nullptr) {
+			tuples_queue->pop_back();
 		}
 		
 	}

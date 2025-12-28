@@ -109,7 +109,7 @@ public:
 		// For each type call the respective deleters on the type
 		for (unsigned int i = 0; i < arena_lists.size(); i++) {
 			if (arena_lists[i].used_objects > 0) {
-				(*allocatable_type_registry::type_deleters)[i](&(arena_lists[i]));
+				(*allocatable_type_registry::type_deleters)[i](&(arena_lists[i]));				
 			}
 		}
 	}

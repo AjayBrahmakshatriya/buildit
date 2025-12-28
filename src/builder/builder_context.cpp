@@ -193,6 +193,13 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 			run_state r_state (&e_state, i_state);
 			ast = extract_ast_from_run(&r_state);
 		} catch (NonDeterministicFailureException &e) {
+			// Before we continue, reset the area, so static 
+			// vars allocated in the arena don't spill to the next execution	
+			// don't use get_invocation_state because r_state is not live
+
+			// but destructor will try to access r_state, so clear it first
+			run_state::current_run_state = nullptr;	
+			i_state->get_arena()->reset_arena();
 			continue;
 		}
 		break;

@@ -14,7 +14,6 @@ class static_var;
 template <typename T>
 using is_static_var_type = std::is_base_of<static_var_base, T>;
 
-
 // The var classes declaration
 class dyn_var_base;
 
@@ -23,6 +22,9 @@ class dyn_var;
 
 template <typename T>
 using is_dyn_var_type = std::is_base_of<dyn_var_base, T>;
+
+template <typename T>
+class builder_union;
 
 template <typename T>
 class type_extractor;
@@ -57,6 +59,11 @@ struct as_member {
 	as_member(dyn_var_base *p, std::string n) : parent_var(p), member_name(n){};
 	as_member(std::string n) : parent_var(parents_stack->back()), member_name(n) {}
 };
+// A tag to create a builder union as 
+// an argument
+struct placeholder {
+
+}; 
 
 class type;
 class generic;

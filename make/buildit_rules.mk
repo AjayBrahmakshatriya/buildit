@@ -1,6 +1,6 @@
 # Actual rules for building the library and the executables
 .SECONDARY: $(BUILD_DIR)/%.o 
-.SECONDARY: $(BUILD_DIR)/samples/%.o 
+.PRECIOUS: $(BUILD_DIR)/samples/%.o 
 
 $(BUILD_DIR)/gen_headers/gen/compiler_headers.h:
 	@mkdir -p $(@D)
