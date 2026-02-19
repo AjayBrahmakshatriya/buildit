@@ -27,9 +27,15 @@ $(BUILD_DIR)/sample%: $(BUILD_DIR)/samples/sample%.o $(LIBRARY) $(DEPS_LIST)
 	@mkdir -p $(@D)
 	$(CXXLDV) -o $@ $< $(LINKER_FLAGS)
 
+# Extra rules to simply compile the samples by name
+$(SAMPLE_NAMES): sample%: $(BUILD_DIR)/sample%
+
+
 .PHONY: executables
 executables: $(SAMPLES)
 
+.PHONY: lib
+lib: $(LIBRARY)
 
 -include $(LIBRARY_OBJS:.o=.d)
 -include $(SAMPLE_OBJS:.o=.d)

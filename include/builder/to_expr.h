@@ -39,6 +39,12 @@ typename std::enable_if<std::is_integral<T>::value, block::expr::Ptr>::type to_e
 	return e;
 }
 
+block::expr::Ptr to_expr(const float& v);
+block::expr::Ptr to_expr(const double& v);
+block::expr::Ptr to_expr(const std::string& s);
+block::expr::Ptr to_expr(const char* s);
+block::expr::Ptr to_expr(char* s);
+
 template <typename T>
 block::expr::Ptr to_expr(const static_var<T>& s) {
 	return to_expr((T)s);
@@ -56,11 +62,7 @@ block::expr::Ptr to_expr(const std::vector<T>& v) {
 	
 }
 
-block::expr::Ptr to_expr(const float& v);
-block::expr::Ptr to_expr(const double& v);
-block::expr::Ptr to_expr(const std::string& s);
-block::expr::Ptr to_expr(const char* s);
-block::expr::Ptr to_expr(char* s);
+
 
 // An untyped expression wrapper
 // to be specifically used for initializer_lists since they need 

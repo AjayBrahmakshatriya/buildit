@@ -122,6 +122,7 @@ tag get_unique_tag(void) {
 
 
 bool tag::operator==(const tag &other) const {
+	if (hash() != other.hash()) return false;
 
 	// Check the dedup id first since it is cheap
 	if (dedup_id != other.dedup_id)

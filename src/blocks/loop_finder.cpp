@@ -1,11 +1,17 @@
 #include "blocks/loop_finder.h"
+#include "blocks/if_flattener.h"
+#include "blocks/c_code_generator.h"
 #include <algorithm>
 namespace block {
 
-static void ensure_back_has_goto(stmt_block::Ptr a, label::Ptr label_detect, std::vector<stmt_block::Ptr> &parents) {
 
+// This function checks the end blocks of the body and checks if they have a goto that goes to the beginning, 
+// If it does, it removes it since it will be an implicit continue. For the blocks that do not go back, 
+// it gathers it into break_parents
+static void ensure_back_has_goto(stmt_block::Ptr a, label::Ptr label_detect, std::vector<stmt_block::Ptr> &break_parents, 
+		std::vector<stmt_block::Ptr>& implicit_continue_blocks) {	
 	if (a->stmts.size() == 0) {
-		parents.push_back(a);
+		break_parents.push_back(a);
 		return;
 	}
 	stmt::Ptr last_stmt = a->stmts.back();
@@ -15,24 +21,20 @@ static void ensure_back_has_goto(stmt_block::Ptr a, label::Ptr label_detect, std
 
 		stmt_block::Ptr then_block = to<stmt_block>(if_stmt_ptr->then_stmt);
 		stmt_block::Ptr else_block = to<stmt_block>(if_stmt_ptr->else_stmt);
-		std::vector<stmt_block::Ptr> if_parents;
-		ensure_back_has_goto(then_block, label_detect, if_parents);
-		ensure_back_has_goto(else_block, label_detect, if_parents);
-		if (if_parents.size() == 2 && if_parents[0] == then_block && if_parents[1] == else_block && false) {
-			parents.push_back(a);
-		} else {
-			for (unsigned int i = 0; i < if_parents.size(); i++) {
-				parents.push_back(if_parents[i]);
-			}
-		}
+		ensure_back_has_goto(then_block, label_detect, break_parents, implicit_continue_blocks);
+		ensure_back_has_goto(else_block, label_detect, break_parents, implicit_continue_blocks);
 	} else if (isa<goto_stmt>(last_stmt) && to<goto_stmt>(last_stmt)->label1 == label_detect) {
 		a->stmts.pop_back();
+		implicit_continue_blocks.push_back(a);
 	} else if (isa<goto_stmt>(last_stmt) && to<goto_stmt>(last_stmt)->label1 != label_detect) {
-		parents.push_back(a);
+		break_parents.push_back(a);
+	//} else if (isa<return_stmt>(last_stmt)) {
+		// Do nothing for return statements, 
+		// they are neither breaks nor continues
 	} else if (isa<break_stmt>(last_stmt)) {
 		assert(false);
 	} else {
-		parents.push_back(a);
+		break_parents.push_back(a);
 	}
 	return;
 }
@@ -91,6 +93,10 @@ void continue_finder::visit(continue_stmt::Ptr) {
 	has_continue = true;
 }
 
+void continue_finder::visit(break_stmt::Ptr) {
+	has_break = true;
+}
+
 static bool check_last_choppable(std::vector<stmt_block::Ptr> &parents) {
 	// Check if everyone has atleast one stmt
 	for (unsigned int i = 0; i < parents.size(); i++) {
@@ -115,7 +121,6 @@ static bool check_last_choppable(std::vector<stmt_block::Ptr> &parents) {
 	return true;
 }
 static void trim_from_parents(std::vector<stmt_block::Ptr> &parents, std::vector<stmt::Ptr> &trimmed) {
-
 	// First check if the ends are all same
 	if (check_last_choppable(parents)) {
 		// Chop a stmt off of everyone
@@ -151,38 +156,163 @@ void loop_finder::visit(stmt_block::Ptr a) {
 	}
 }
 
-static void merge_condition_with_loop(while_stmt::Ptr new_while) {
+static stmt::Ptr fix_loop_inversion_impl(if_stmt::Ptr ifs) {
+
+	if (!isa<stmt_block>(ifs->then_stmt))
+		return ifs;
+	
+	auto then_block = to<stmt_block>(ifs->then_stmt);
+	auto else_block = to<stmt_block>(ifs->else_stmt);
+	
+	if (then_block->stmts.size() != 1 || else_block->stmts.size() != 0) 
+		return ifs;
+
+	if (!isa<while_stmt>(then_block->stmts[0]))
+		return ifs;
+	
+	auto ws = to<while_stmt>(then_block->stmts[0]);
+
+	if (!isa<int_const>(ws->cond))
+		return ifs;
+
+	if (!(to<int_const>(ws->cond)->value == 1))
+		return ifs;
+
+	if (!isa<stmt_block>(ws->body))
+		return ifs;
+	
+	if (to<stmt_block>(ws->body)->stmts.size() == 0) 
+		return ifs;
+	
+	auto last_stmt = to<stmt_block>(ws->body)->stmts.back();
+	if (!isa<if_stmt>(last_stmt))
+		return ifs;
+
+	if (!isa<not_expr>(to<if_stmt>(last_stmt)->cond))
+		return ifs;
+	if (!to<not_expr>(to<if_stmt>(last_stmt)->cond)->expr1->is_same(ifs->cond))
+		return ifs;
+
+	auto nfs = to<if_stmt>(last_stmt);
+
+	if (!isa<stmt_block>(nfs->then_stmt) || to<stmt_block>(nfs->then_stmt)->stmts.size() != 1)
+		return ifs;
+	if (!isa<stmt_block>(nfs->else_stmt) || to<stmt_block>(nfs->else_stmt)->stmts.size() != 0)
+		return ifs;
+
+	if (!isa<break_stmt>(to<stmt_block>(nfs->then_stmt)->stmts[0]))
+		return ifs;	
+	
+	// make sure ws has no continues
+	continue_finder counter;
+	ws->accept(&counter);
+	if (counter.has_continue)
+		return ifs;
+
+
+	// everything looks good, time to patch
+	ws->cond = ifs->cond;
+	to<stmt_block>(ws->body)->stmts.pop_back();
+	ws->implicit_continue_blocks = {to<stmt_block>(ws->body)};
+	
+	return ws;
+}
+
+void fix_loop_inversion::visit(if_stmt::Ptr ifs) {
+	block_replacer::visit(ifs);	
+	node = fix_loop_inversion_impl(ifs);
+}
+
+
+static void merge_condition_with_loop(while_stmt::Ptr new_while, std::vector<stmt::Ptr> &stmts_before) {
+	//return;
 	// If the body of the while loop only has a single if condition and
 	// the else part of the condition is just a break, fuse the if with
 	// the loop
 
+	// Another pattern is the do-while pattern where if the loop has multiple statements and the last
+	// statement is like the one described above, and the statements before don't have break or continues, 
+	// it can be turned into a loop too
+
+	// Also accepts a reference to statements before, required for do-while conversion
+
 	if (to<stmt_block>(new_while->body)->stmts.size() == 1 &&
-	    isa<if_stmt>(to<stmt_block>(new_while->body)->stmts[0])) {
-		if_stmt::Ptr if_body = to<if_stmt>(to<stmt_block>(new_while->body)->stmts[0]);
+	    isa<if_stmt>(to<stmt_block>(new_while->body)->stmts.back())) {
+		if_stmt::Ptr if_body = to<if_stmt>(to<stmt_block>(new_while->body)->stmts.back());
 
-		stmt::Ptr then_stmt = if_body->then_stmt;
-		stmt::Ptr else_stmt = if_body->else_stmt;
-
-		if (isa<stmt_block>(else_stmt) && to<stmt_block>(else_stmt)->stmts.size() == 1) {
-			if (isa<break_stmt>(to<stmt_block>(else_stmt)->stmts[0])) {
-				new_while->cond = if_body->cond;
-				// new_while->body =
-				// std::make_shared<stmt_block>();
-				new_while->body = then_stmt;
-				return;
+		// Make sure the statements before don't have a break or continue
+		bool prior_is_eligible = true;
+		auto sb = to<stmt_block>(new_while->body);
+		for (unsigned i = 0; i < sb->stmts.size() - 1; i++) {
+			continue_finder finder;
+			sb->stmts[i]->accept(&finder);
+			if (finder.has_break || finder.has_continue) {
+				prior_is_eligible = false;
+				break;
 			}
 		}
-		if (isa<stmt_block>(then_stmt) && to<stmt_block>(then_stmt)->stmts.size() == 1) {
-			if (isa<break_stmt>(to<stmt_block>(then_stmt)->stmts[0])) {
-				not_expr::Ptr new_cond = std::make_shared<not_expr>();
-				new_cond->static_offset = if_body->cond->static_offset;
-				new_cond->expr1 = if_body->cond;
-				new_while->cond = new_cond;
-				new_while->body = else_stmt;
-				return;
+
+		if (prior_is_eligible) {
+			stmt::Ptr then_stmt = if_body->then_stmt;
+			stmt::Ptr else_stmt = if_body->else_stmt;
+			if (isa<stmt_block>(else_stmt) && to<stmt_block>(else_stmt)->stmts.size() == 1) {
+				if (isa<break_stmt>(to<stmt_block>(else_stmt)->stmts[0])) {
+					new_while->cond = if_body->cond;
+					// new_while->body =
+					// std::make_shared<stmt_block>();
+					new_while->body = then_stmt;
+					// Push the new statements into the body
+					bool implicit_changed = false;
+					for (unsigned i = 0; i < sb->stmts.size() - 1; i++) {	
+						// Statement needs to be pushed at the end of all continue blocks, 
+						// implicit and explicit. However for the implicit ones, just push 
+						// once at the end instead of in each of them
+						to<stmt_block>(new_while->body)->stmts.push_back(sb->stmts[i]);
+						for (auto p: new_while->continue_blocks) {
+							auto cont_stmt = p->stmts.back();
+							p->stmts.pop_back();
+							p->stmts.push_back(sb->stmts[i]);
+							p->stmts.push_back(cont_stmt);
+						}
+						stmts_before.push_back(sb->stmts[i]);
+						implicit_changed = true;
+					}
+					if (implicit_changed) {
+						new_while->implicit_continue_blocks.clear();
+						new_while->implicit_continue_blocks.push_back(to<stmt_block>(new_while->body));
+					}
+					return;
+				}
+			}
+			if (isa<stmt_block>(then_stmt) && to<stmt_block>(then_stmt)->stmts.size() == 1) {
+				if (isa<break_stmt>(to<stmt_block>(then_stmt)->stmts[0])) {
+					not_expr::Ptr new_cond = std::make_shared<not_expr>();
+					new_cond->static_offset = if_body->cond->static_offset;
+					new_cond->expr1 = if_body->cond;
+					new_while->cond = new_cond;
+					new_while->body = else_stmt;
+					bool implicit_changed = false;
+					for (unsigned i = 0; i < sb->stmts.size() - 1; i++) {
+						to<stmt_block>(new_while->body)->stmts.push_back(sb->stmts[i]);
+						for (auto p: new_while->continue_blocks) {
+							auto cont_stmt = p->stmts.back();
+							p->stmts.pop_back();
+							p->stmts.push_back(sb->stmts[i]);
+							p->stmts.push_back(cont_stmt);
+						}
+						stmts_before.push_back(sb->stmts[i]);
+						implicit_changed = true;
+					}
+					if (implicit_changed) {
+						new_while->implicit_continue_blocks.clear();
+						new_while->implicit_continue_blocks.push_back(to<stmt_block>(new_while->body));
+					}
+					return;
+				}
 			}
 		}
 	}
+	
 	// Other pattern is if the loops first statement is a if condition that
 	// breaks
 	if (isa<if_stmt>(to<stmt_block>(new_while->body)->stmts[0])) {
@@ -261,40 +391,45 @@ void loop_finder::visit_label(label_stmt::Ptr a, stmt_block::Ptr parent) {
 	new_while->body = std::make_shared<stmt_block>();
 	to<stmt_block>(new_while->body)->stmts = stmts_in_body;
 
-	std::vector<stmt_block::Ptr> parents;
+	std::vector<stmt_block::Ptr> break_parents;
+	std::vector<stmt_block::Ptr> implicit_continue_parents;
 
 	// Clean up all loops in this body
 	loop_finder finder;
 	finder.ast = new_while->body;
 	new_while->body->accept(&finder);
 
-	ensure_back_has_goto(to<stmt_block>(new_while->body), a->label1, parents);
+	ensure_back_has_goto(to<stmt_block>(new_while->body), a->label1, break_parents, implicit_continue_parents);
+	// Record the explicit continues for later (for_loop_finder)
+	new_while->implicit_continue_blocks = implicit_continue_parents;
 
+	// For statements that are not at the end, find the gotos and insert explicit continues
 	std::vector<stmt_block::Ptr> collects;
-
 	insert_continues(to<stmt_block>(new_while->body), a->label1, collects);
+	// Record the explicit continues for later
 	new_while->continue_blocks = collects;
 
-	insert_breaks(to<stmt_block>(new_while->body), a->label1, parents);
+	// Gather blocks that have a break but are not at the end
+	insert_breaks(to<stmt_block>(new_while->body), a->label1, break_parents);
+	new_while->break_blocks = break_parents;
 
 	std::vector<stmt::Ptr> trimmed;
 
-	if (parents.size() > 0)
-		trim_from_parents(parents, trimmed);
+	if (break_parents.size() > 0)
+		trim_from_parents(break_parents, trimmed);
 
 	// Now push a break to the end of every parent
-	for (stmt_block::Ptr block : parents) {
-
-		// if (block->stmts.size() > 0 &&
-		// isa<goto_stmt>(block->stmts.back())) continue;
-
+	for (stmt_block::Ptr block : break_parents) {
+		if (block->stmts.size() > 0 && isa<return_stmt>(block->stmts.back())) continue;
+	
 		break_stmt::Ptr new_break = std::make_shared<break_stmt>();
 		block->stmts.push_back(new_break);
 	}
 
 	std::reverse(trimmed.begin(), trimmed.end());
 
-	merge_condition_with_loop(new_while);
+	// stmts_before is passed by reference and can be updated
+	merge_condition_with_loop(new_while, stmts_before);
 
 	// Once we are happy with the loops, we have to make sure that this loop doesn't have any other jumps
 	// If it does, we should pull them out. So outer loops can handle them

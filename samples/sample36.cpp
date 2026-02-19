@@ -95,7 +95,7 @@ static dyn<int> match_regex(const char *re, dyn<char *> str) {
 
 int main(int argc, char *argv[]) {
 	builder::builder_context context;
-	context.feature_unstructured = true;
+	context.feature_unstructured = false;
 	context.run_rce = true;
 	auto ast = context.extract_function_ast(match_regex, "match_re", "ab*c*d");
 	std::cout << "#include <string.h>" << std::endl;

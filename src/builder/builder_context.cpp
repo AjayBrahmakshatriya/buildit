@@ -1,6 +1,7 @@
 #include "builder/builder_context.h"
 #include "blocks/for_loop_finder.h"
 #include "blocks/if_switcher.h"
+#include "blocks/if_flattener.h"
 #include "blocks/label_inserter.h"
 #include "blocks/loop_finder.h"
 #include "blocks/loop_roll.h"
@@ -15,169 +16,33 @@
 
 namespace builder {
 
-
-static void trim_ast_at_offset(block::stmt::Ptr ast, tracer::tag offset) {
-	return;
-	block::stmt_block::Ptr top_level_block = block::to<block::stmt_block>(ast);
-	std::vector<block::stmt::Ptr> &stmts = top_level_block->stmts;
-	std::vector<block::stmt::Ptr> new_stmts;
-
-	unsigned int i;
-	for (i = 0; i < stmts.size(); i++) {
-		if (stmts[i]->static_offset == offset)
-			break;
-	}
-	for (i++; i < stmts.size(); i++) {
-		new_stmts.push_back(stmts[i]);
-	}
-	top_level_block->stmts = new_stmts;
-}
-
-static std::pair<std::vector<block::stmt::Ptr>, std::vector<block::stmt::Ptr>>
-trim_common_from_back(block::stmt::Ptr ast1, block::stmt::Ptr ast2) {
-
+static std::vector<block::stmt::Ptr> trim_common_from_back(block::stmt::Ptr ast1, block::stmt::Ptr ast2) {
 	std::vector<block::stmt::Ptr> trimmed_stmts;
 	std::vector<block::stmt::Ptr> &ast1_stmts = block::to<block::stmt_block>(ast1)->stmts;
 	std::vector<block::stmt::Ptr> &ast2_stmts = block::to<block::stmt_block>(ast2)->stmts;
 
-	std::vector<block::stmt::Ptr> split_decls;
-
-	if (ast1_stmts.size() > 0 && ast2_stmts.size() > 0) {
-		while (1) {
-			if (ast1_stmts.size() == 0 || ast2_stmts.size() == 0)
-				break;
-			if (ast1_stmts.back()->static_offset != ast2_stmts.back()->static_offset ||
-			    !ast1_stmts.back()->is_same(ast2_stmts.back())) {
-				// There is a special case where there could be
-				// an if stmt with same body but different
-				// conditions We handle that by splitting the
-				// condition from the if stmt using a variable
-				if (block::isa<block::if_stmt>(ast1_stmts.back()) &&
-				    block::isa<block::if_stmt>(ast2_stmts.back())) {
-
-					block::if_stmt::Ptr if1 = block::to<block::if_stmt>(ast1_stmts.back());
-					block::if_stmt::Ptr if2 = block::to<block::if_stmt>(ast2_stmts.back());
-					if (if1->needs_splitting(if2)) {
-						ast1_stmts.pop_back();
-						ast2_stmts.pop_back();
-
-						block::var::Ptr cond_var = std::make_shared<block::var>();
-						cond_var->var_type = type_extractor<int>::extract_type();
-						cond_var->static_offset = tracer::get_unique_tag();
-
-						block::decl_stmt::Ptr decl_stmt = std::make_shared<block::decl_stmt>();
-						decl_stmt->static_offset = if1->static_offset;
-
-						decl_stmt->decl_var = cond_var;
-						decl_stmt->init_expr = nullptr;
-
-						split_decls.push_back(decl_stmt);
-
-						block::expr_stmt::Ptr stmt1 = std::make_shared<block::expr_stmt>();
-						stmt1->static_offset = if1->static_offset;
-						block::assign_expr::Ptr assign1 =
-						    std::make_shared<block::assign_expr>();
-						assign1->static_offset = if1->static_offset;
-						block::var_expr::Ptr varexpr1 = std::make_shared<block::var_expr>();
-						varexpr1->static_offset = if1->static_offset;
-						varexpr1->var1 = cond_var;
-						assign1->var1 = varexpr1;
-						assign1->expr1 = if1->cond;
-						stmt1->expr1 = assign1;
-						ast1_stmts.push_back(stmt1);
-
-						block::expr_stmt::Ptr stmt2 = std::make_shared<block::expr_stmt>();
-						stmt2->static_offset = if2->static_offset;
-						block::assign_expr::Ptr assign2 =
-						    std::make_shared<block::assign_expr>();
-						assign2->static_offset = if2->static_offset;
-						block::var_expr::Ptr varexpr2 = std::make_shared<block::var_expr>();
-						varexpr2->static_offset = if2->static_offset;
-						varexpr2->var1 = cond_var;
-						assign2->var1 = varexpr2;
-						assign2->expr1 = if2->cond;
-						stmt2->expr1 = assign2;
-						ast2_stmts.push_back(stmt2);
-
-						block::var_expr::Ptr varexpr3 = std::make_shared<block::var_expr>();
-						varexpr3->static_offset = if2->static_offset;
-						varexpr3->var1 = cond_var;
-						if1->cond = varexpr3;
-						trimmed_stmts.push_back(if1);
-						continue;
-
-					} else {
-						break;
-					}
-				}
-				break;
-			}
-			if (ast1_stmts.back()->static_offset.is_empty()) {
-				// The only possibility is that these two are
-				// goto statements. Gotos are same only if they
-				// are going to the same label
-				assert(block::isa<block::goto_stmt>(ast1_stmts.back()));
-				assert(block::isa<block::goto_stmt>(ast2_stmts.back()));
-				block::goto_stmt::Ptr gt1 = block::to<block::goto_stmt>(ast1_stmts.back());
-				block::goto_stmt::Ptr gt2 = block::to<block::goto_stmt>(ast2_stmts.back());
-				if (gt1->temporary_label_number != gt2->temporary_label_number)
-					break;
-			}
-			block::stmt::Ptr trimmed_stmt = ast1_stmts.back();
-			ast1_stmts.pop_back();
-			ast2_stmts.pop_back();
-			trimmed_stmts.push_back(trimmed_stmt);
-		}
+	while (ast1_stmts.size() > 0 && ast2_stmts.size() > 0 && ast1_stmts.back()->is_same(ast2_stmts.back())) {
+		block::stmt::Ptr trimmed_stmt = ast1_stmts.back();
+		ast1_stmts.pop_back();
+		ast2_stmts.pop_back();
+		trimmed_stmts.push_back(trimmed_stmt);
 	}
-	// Handle a special case where one of the branch ends in a goto
-	// In this case everything from the second branch can be safely added to
-	// the common part This has to be checked only in the end because gotos
-	// can appear on both the sides and should be trimmed of before
 
-	// Also allow this optimization if one of the branch ends in return
-	if (ast1_stmts.size() != 0 && ast2_stmts.size() != 0) {
-		if (block::isa<block::goto_stmt>(ast1_stmts.back()) ||
-		    block::isa<block::return_stmt>(ast1_stmts.back())) {
-			while (ast2_stmts.size() > 0) {
-				block::stmt::Ptr trimmed_stmt = ast2_stmts.back();
-				ast2_stmts.pop_back();
-				trimmed_stmts.push_back(trimmed_stmt);
-			}
-		} else if (block::isa<block::goto_stmt>(ast2_stmts.back()) ||
-			   block::isa<block::return_stmt>(ast2_stmts.back())) {
-			while (ast1_stmts.size() > 0) {
-				block::stmt::Ptr trimmed_stmt = ast1_stmts.back();
-				ast1_stmts.pop_back();
-				trimmed_stmts.push_back(trimmed_stmt);
-			}
-		}
+	// If the only statement trimmed is a return, add it back to the branches
+	// that way the next special case can keep the generated code clean
+	if (trimmed_stmts.size() == 1 && block::isa<block::return_stmt>(trimmed_stmts.back())) {
+		ast1_stmts.push_back(trimmed_stmts.back());
+		ast2_stmts.push_back(trimmed_stmts.back());
+		trimmed_stmts.pop_back();	
 	}
 
 	std::reverse(trimmed_stmts.begin(), trimmed_stmts.end());
-	return {trimmed_stmts, split_decls};
+	return trimmed_stmts;
 }
-/*
-static void builder_context::reset_for_nd_failure() {
-	// Clear all shared_state
-	memoized_tags->map.clear();
-	// Clear per run state if any
-	uncommitted_sequence.clear();
-	ast = nullptr;
-	current_block_stmt = nullptr;
-	bool_vector.clear();
-	visited_offsets.clear();
-	expr_sequence.clear();
-	expr_counter = 0;
-	current_label = "";
-	static_var_tuples.clear();
-	deferred_static_var_tuples.clear();
-	// Increment creation counter since we are running again
-	debug_creation_counter++;
-}
-*/
-
 
 void builder_context::extract_function_ast_impl(invocation_state* i_state) {
+
+	last_num_runs = 0;
 
 #ifndef ENABLE_D2X
 	if (enable_d2x)
@@ -232,6 +97,12 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 	block::sub_expr_cleanup cleaner;
 	ast->accept(&cleaner);
 
+	block::recursive_merger merger;
+	ast->accept(&merger);
+
+	block::if_flattener flattener(false);
+	ast->accept(&flattener);
+	
 	if (!feature_unstructured) {
 
 		block::basic_block::cfg_block BBs = generate_basic_blocks(block::to<block::stmt_block>(ast));
@@ -241,14 +112,22 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 		ast->accept(&finder);
 
 		block::if_switcher switcher;
-		ast->accept(&switcher);
+		ast->accept(&switcher);	
+	
+		block::fix_loop_inversion inv_fixer;
+		ast->accept(&inv_fixer);
 
 		block::for_loop_finder for_finder;
 		for_finder.ast = ast;
 		ast->accept(&for_finder);
+
+		// Post loop finder flattener doesn't ignore
+		// double sided jumps
+		block::if_flattener flattener(false);
+		ast->accept(&flattener);
+
+		ast->accept(&switcher);	
 	}
-
-
 	// Run RCE after loop finder
 	// since RCE does rely on loops being detected
 	// If labels are still kept around, RCE cannot be as aggressive 
@@ -264,6 +143,9 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 	i_state->generated_func_decl->body = ast;	
 }
 block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
+	// Update stats
+	last_num_runs++;	
+
 	r_state->current_stmt_block = std::make_shared<block::stmt_block>();
 	block::stmt_block::Ptr ast = r_state->current_stmt_block;
 
@@ -285,7 +167,6 @@ block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
 		ret_ast = ast;
 		get_invocation_state()->get_arena()->reset_arena();
 		run_state::current_run_state = nullptr;
-
 	} catch (OutOfBoolsException &e) {
 
 		// Reset dyn_var arena before starting new runs
@@ -321,27 +202,16 @@ block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
 		block::stmt_block::Ptr true_ast = block::to<block::stmt_block>(extract_ast_from_run(&true_r_state));
 		block::stmt_block::Ptr false_ast = block::to<block::stmt_block>(extract_ast_from_run(&false_r_state));
 
-		trim_ast_at_offset(true_ast, e.static_offset);
-		trim_ast_at_offset(false_ast, e.static_offset);
-
-		std::pair<std::vector<block::stmt::Ptr>, std::vector<block::stmt::Ptr>> trim_pair =
-		    trim_common_from_back(true_ast, false_ast);
-
-		std::vector<block::stmt::Ptr> trimmed_stmts = trim_pair.first;
-		std::vector<block::stmt::Ptr> split_decls = trim_pair.second;
-
+		std::vector<block::stmt::Ptr> trimmed_stmts = trim_common_from_back(true_ast, false_ast);
 		r_state->erase_tag(e.static_offset);
 
 		block::if_stmt::Ptr new_if_stmt = std::make_shared<block::if_stmt>();
-		new_if_stmt->annotation = last_stmt->annotation;
 		new_if_stmt->static_offset = e.static_offset;
-
 		new_if_stmt->cond = cond_expr;
 		new_if_stmt->then_stmt = true_ast;
 		new_if_stmt->else_stmt = false_ast;
+		new_if_stmt->annotation = last_stmt->annotation;
 
-		for (auto stmt : split_decls)
-			r_state->add_stmt_to_current_block(stmt, false);
 		r_state->add_stmt_to_current_block(new_if_stmt, false);
 
 		std::copy(trimmed_stmts.begin(), trimmed_stmts.end(), std::back_inserter(r_state->current_stmt_block->stmts));

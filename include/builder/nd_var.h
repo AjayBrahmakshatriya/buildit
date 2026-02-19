@@ -77,11 +77,12 @@ template <typename T>
 class nd_var {
 	static_assert(std::is_base_of<nd_var_base, T>::value, "Types wrapped in nd_var must derive from nd_var_base");
 	std::shared_ptr<T> val;	
-
+	tracer::tag t_cached;
 public:
 	template <typename...Args>
 	nd_var(Args&&...args) {
 		tracer::tag t = tracer::get_offset_in_function();
+		t_cached = t;
 		val = get_or_create_generator<T>(t, std::forward<Args>(args)...);
 	}
 
@@ -113,5 +114,16 @@ public:
 
 
 
+template <typename Lattice>
+class prophecy_var {
+	public:
+		prophecy_var(Lattice::value_type v = Lattice::bottom);
+		void requires_atleast(Lattice::value_type v);
+		bool is_atmost(Lattice::value_type v);
 }
+
+}
+
+
+
 #endif

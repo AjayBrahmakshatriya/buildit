@@ -149,6 +149,7 @@ bool run_state::get_next_bool(block::expr::Ptr expr) {
 }
 
 void run_state::insert_live_dyn_var(const tracer::tag& t) {
+	return;
 	// First convert the tag to tag_id using the invocation's tag factory
 	tracer::tag_id tid = i_state->tag_factory_instance.create_tag_id(t);
 	// Insert it into the live set and sort
@@ -156,6 +157,7 @@ void run_state::insert_live_dyn_var(const tracer::tag& t) {
 	std::sort(live_dyn_vars.begin(), live_dyn_vars.end());
 }
 void run_state::remove_live_dyn_var(const tracer::tag& t) {
+	return;
 	// First convert the tag to tag_id using the invocation's tag factory
 	tracer::tag_id tid = i_state->tag_factory_instance.create_tag_id(t);
 

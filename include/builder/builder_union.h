@@ -19,6 +19,18 @@ struct dyn_var_to_union<T, dyn_var<TR>> {
 };
 
 
+
+template <typename T>
+struct builder_as_const_t {
+	T val;
+	builder_as_const_t(const T& v): val(v) {}
+};
+
+template <typename T>
+builder_as_const_t<T> builder_as_const(const T& v) {
+	return builder_as_const_t<T>(v);
+}
+
 // builder_union doesn't inherit
 // from dyn_var but wraps around it
 template <typename T>
@@ -26,9 +38,17 @@ class builder_union {
 public:
 	dyn_var<T> var;
 	static_var<T> cval;
+	T ccval;
+
 	enum mode {
 		STATIC,
-		DYNAMIC
+		// This mode is same as static, except 
+		// this value _can_ never be assigned
+		// and immediately promotes to DYNAMIC if ever assigned
+		// It is basically a special case of STATIC with max count = 1
+		// and is created with a special constructor
+		STATIC_CONST,
+		DYNAMIC,
 	} var_mode;
 	
 	nd_var<true_top> needs_dynamic = true_top::F;
@@ -54,17 +74,22 @@ public:
 			// Regular defer init the dynamic variable
 			var.deferred_init(args...);
 		} else {
+			// Initialize as STATIC, 
 			var_mode = STATIC;
-			// Regular defer init the static_variable
-			cval.deferred_init();
-			//cval needs to be initialized outside
+			cval.deferred_init(args...);
 		}
 		
 	}
 
+	T get_as_concrete(void) const {
+		assert((var_mode == STATIC || var_mode == STATIC_CONST) && "Variable not const");
+		if (var_mode == STATIC) 
+			return cval;
+		else
+			return ccval;
+	}
+
 public:
-
-
 	
 	builder_union(): var(defer_init()), cval(defer_init()) {
 		check_and_init();
@@ -78,10 +103,7 @@ public:
 			var.deferred_init(other.var);
 		} else {
 			// If RHS is static, we do the regular init
-			check_and_init(other.cval);
-			if (var_mode == STATIC) {
-				cval = other.cval;
-			}
+			check_and_init(other.get_as_concrete());
 		}
 	}			
 
@@ -95,8 +117,6 @@ public:
 	// With block var works exactly the same, but it also sets the type
 	builder_union(const with_block_var& bv): var(bv), cval(defer_init()) {
 		var_mode = DYNAMIC;
-		bv.var->var_type = create_block_type();
-		bv.var->var_type->static_offset = bv.var->static_offset;
 	}
 
 	template <typename TO>
@@ -104,17 +124,38 @@ public:
 		var_mode = DYNAMIC;
 	}
 	
-	// If it is a constant, 
+	// If it is a constant, still call check and init, ccval needs to be initialized after
 	builder_union(const T& v): var(defer_init()), cval(defer_init()) {
 		check_and_init(v);
-		if (var_mode == STATIC) {
-			cval = v;
-		}	
 	}
+
+	// Special constructor when the value is an PRVALUE
+	builder_union(const builder_as_const_t<T>& v): var(defer_init()), cval(defer_init()) {
+		// Can still be dynamic, so we will have to check		
+		if (needs_dynamic.get()->value == true_top::T) {
+			var_mode = DYNAMIC;
+			// Regular defer init the dynamic variable
+			var.deferred_init(v.val);
+		} else {
+			// Initialize as STATIC_CONST
+			var_mode = STATIC_CONST;
+			ccval = v.val;
+		}
+	}	
 	
 	builder_union& operator=(const builder_union& other) {
+		if (this == other.addr()) return *this;
+
+		if (var_mode == STATIC_CONST) {
+			// static const can never be assigned, immediately promote it to DYNAMIC
+			needs_dynamic.require_val(true_top::T);
+			// This assert should never hit
+			assert(false && "Static const can never be assigned");		
+		}
+
 		assign_count++;
 
+		// Check early if variable needs promotion		
 		if (var_mode == STATIC) {
 			if (assign_count > assign_count_max) {
 				needs_dynamic.require_val(true_top::T);
@@ -128,12 +169,14 @@ public:
 				// This assert should never hit
 				assert(false && "Static variable cannot be assigned from dynamic");	
 			}	
+			// variable is already static, no need to promote
 			// LHS and RHS are both static, 
-			cval = other.cval;
+			cval = other.get_as_concrete();
 		} else {
-			// If we are dynamic, there is not checks
-			if (other.var_mode == STATIC) {
-				var = other.cval;
+			// Must be dynamic
+			// If we are dynamic, there are no checks
+			if (other.var_mode != DYNAMIC) {
+				var = other.get_as_concrete();
 			} else {
 				var = other.var;
 			}
@@ -142,13 +185,19 @@ public:
 		return *this;
 	}
 	explicit operator bool () {
-		if (var_mode == STATIC) return (bool) cval;
+		if (var_mode != DYNAMIC) return (bool) get_as_concrete();
 		else return (bool) var;
 	}
 public:
 	// Same API as dyn_var so the signature extract works
 	static block::type::Ptr create_block_type(void) {
 		return type_extractor<T>::extract_type();
+	}
+	builder_union<T>* addr(void) {
+		return this;
+	}
+	const builder_union<T>* addr(void) const {
+		return this;
 	}
 public:
 	
@@ -159,8 +208,8 @@ public:
 // to_expr overload
 template <typename T>
 block::expr::Ptr to_expr(const builder_union<T>& d) {
-	if (d.var_mode == builder_union<T>::STATIC) {
-		return to_expr(d.cval);
+	if (d.var_mode != builder_union<T>::DYNAMIC) {
+		return to_expr(d.get_as_concrete());
 	} else {
 		return to_expr(d.var);
 	}
@@ -195,12 +244,12 @@ template <typename T1, typename T2,  \
 	typename dyn_var_to_union<decltype(std::declval<dyn_var<T1>>() op std::declval<dyn_var<T2>>())>::type> \
 auto bunion_##op_name (const builder_union<T1>& d1, const builder_union<T2>& d2) -> RetType& { \
 	/* The special case is if both sides are static*/ \
-	if (d1.var_mode == builder_union<T1>::STATIC && d2.var_mode == builder_union<T2>::STATIC) { \
-		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.cval op d2.cval)); \
-	} else if (d1.var_mode == builder_union<T1>::STATIC && d2.var_mode == builder_union<T2>::DYNAMIC) { \
-		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.cval op d2.var)); \
-	} else if (d1.var_mode == builder_union<T1>::DYNAMIC && d2.var_mode == builder_union<T2>::STATIC) { \
-		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.var op d2.cval)); \
+	if (d1.var_mode != builder_union<T1>::DYNAMIC && d2.var_mode != builder_union<T2>::DYNAMIC) { \
+		return *get_invocation_state()->get_arena()->allocate<RetType>(builder_as_const(d1.get_as_concrete() op d2.get_as_concrete())); \
+	} else if (d1.var_mode != builder_union<T1>::DYNAMIC && d2.var_mode == builder_union<T2>::DYNAMIC) { \
+		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.get_as_concrete() op d2.var)); \
+	} else if (d1.var_mode == builder_union<T1>::DYNAMIC && d2.var_mode != builder_union<T2>::DYNAMIC) { \
+		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.var op d2.get_as_concrete())); \
 	} else { \
 		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.var op d2.var)); \
 	} \
@@ -214,8 +263,8 @@ auto operator op (const T1& d1, const T2& d2) -> RetType { \
 #define UNARY_OPERATOR(op, op_name) \
 template <typename T1, typename RetType = typename dyn_var_to_union<decltype(op std::declval<dyn_var<T1>>())>::type> \
 auto operator op (const builder_union<T1>& d1) -> RetType& { \
-	if (d1.var_mode == builder_union<T1>::STATIC) { \
-		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(op d1.cval)); \
+	if (d1.var_mode != builder_union<T1>::DYNAMIC) { \
+		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(op d1.get_as_concrete())); \
 	} else { \
 		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(op d1.var)); \
 	} \

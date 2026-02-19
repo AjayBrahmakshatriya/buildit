@@ -114,6 +114,10 @@ public:
 		try_get_name();
 		is_not_initialized = false;
 	}
+	void deferred_init(const T& v) {
+		deferred_init();
+		val = v;	
+	}
 
 	~static_var() {
 		// If it is deferred and is not initialized, 

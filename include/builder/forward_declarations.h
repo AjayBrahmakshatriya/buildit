@@ -26,6 +26,14 @@ using is_dyn_var_type = std::is_base_of<dyn_var_base, T>;
 template <typename T>
 class builder_union;
 
+template <typename T, typename TR=typename std::remove_reference<T>::type>
+struct is_builder_union: std::false_type {};
+
+template <typename T, typename TR>
+struct is_builder_union<T, builder_union<TR>>: std::true_type {
+	using type = TR;
+};
+
 template <typename T>
 class type_extractor;
 

@@ -76,6 +76,9 @@ int main(int argc, char *argv[]) {
 	const char* bf_program = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.++++++"
 		     "+..+++.>>.<-.<.+++.------.--------.>>+.>++.";
 
+	//const char* bf_program = "[>+[>-]>+[<]<-]+";
+	//const char* bf_program = "[[+]-]";
+
 	auto ast = context.extract_function_ast(interpret_bf, "main", bf_program);
 
 	print_wrapper_code(std::cout);

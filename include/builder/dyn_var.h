@@ -74,7 +74,7 @@ public:
 // But still uses dyn_var internally, this way dyn_var doesn't
 // have to implement stuff differently
 template <typename T>
-class dyn_var_impl: public dyn_var_base {
+class dyn_var_impl: public dyn_var_base, public op_sq_bkt_cache_provider<T> {
 
 private:	
 	// Helper functions that depend on the type
@@ -270,7 +270,13 @@ public:
 	// Unary * operator also uses the same provider
 	template <typename TC=T>
 	dyn_var<op_sq_bkt_ret_provider_t<TC>>& operator* (void) {
+		// Caching applied only for * and not [] since all * are the same
+		// but [] has indices
+		if (this->op_sq_bkt_cached_ret) {
+			return *(this->op_sq_bkt_cached_ret);
+		}
 		auto& ret = operator[](0);
+		this->op_sq_bkt_cached_ret = ret.addr();
 		block::expr::Ptr be = ret.block_expr;
 		be->setMetadata<bool>("deref_is_star", true);
 		return ret;

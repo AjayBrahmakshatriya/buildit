@@ -79,9 +79,7 @@ static bool has_further_uses(decl_stmt::Ptr decl, std::vector<stmt::Ptr> stmts, 
 void for_loop_finder::visit(stmt_block::Ptr a) {
 	while (1) {
 		int while_loop_index = -1;
-		std::vector<stmt_block::Ptr> parents;
 		for (unsigned int i = 0; i < a->stmts.size(); i++) {
-			parents.clear();
 			if (isa<while_stmt>(a->stmts[i])) {
 				while_stmt::Ptr loop = to<while_stmt>(a->stmts[i]);
 				// All checks for while loop -> for loop
@@ -120,19 +118,34 @@ void for_loop_finder::visit(stmt_block::Ptr a) {
 				if (loop_body->stmts.size() < 1)
 					continue;
 
-				if (!is_last_update(init_var, loop_body, parents))
-					continue;
-
-				/*
-								if (parents.size() == 0)
-									continue;
-				*/
-				for (auto stmt : loop->continue_blocks) {
-					if (loop->continue_blocks.size() < 2)
-						continue;
-					if (!is_update(init_var, stmt->stmts[stmt->stmts.size() - 2]))
-						continue;
+				// check all the implicit continue blocks if their last stmt is an update
+				bool all_blocks_have_updates = true;
+				for (auto p: loop->implicit_continue_blocks) {
+					// There is no continue so just check the last 
+					// statement if it exists
+					if (p->stmts.size() == 0) {
+						all_blocks_have_updates = false;
+						break;
+					}
+					if (!is_update(init_var, p->stmts.back())) {
+						all_blocks_have_updates = false;	
+						break;
+					}
 				}
+				if (!all_blocks_have_updates)
+					continue;
+				for (auto stmt : loop->continue_blocks) {
+					if (stmt->stmts.size() < 2) {
+						all_blocks_have_updates = false;
+						break;
+					}
+					if (!is_update(init_var, stmt->stmts[stmt->stmts.size() - 2])) {
+						all_blocks_have_updates = false;
+						break;
+					}
+				}
+				if (!all_blocks_have_updates)
+					continue;
 				while_loop_index = i - 1;
 				break;
 			}
@@ -161,6 +174,7 @@ void for_loop_finder::visit(stmt_block::Ptr a) {
 			for_loop->annotation = for_loop->decl_stmt->annotation;
 			for_loop->decl_stmt->annotation.clear();
 			for_loop->cond = loop->cond;
+			auto &parents = loop->implicit_continue_blocks;
 			if (parents.size() == 0) {
 				for_loop->update = nullptr;
 			} else {

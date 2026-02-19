@@ -37,6 +37,16 @@ struct op_sq_bkt_ret_provider<T, typename utils::check_valid_type<typename T::de
 template <typename T>
 using op_sq_bkt_ret_provider_t = typename op_sq_bkt_ret_provider<T>::type;
 
+
+template <typename T, typename V=void>
+struct op_sq_bkt_cache_provider {
+};
+
+template <typename T>
+struct op_sq_bkt_cache_provider<T, typename utils::check_valid_type<op_sq_bkt_ret_provider_t<T>>::type> {
+	dyn_var<op_sq_bkt_ret_provider_t<T>>* op_sq_bkt_cached_ret = nullptr;
+};
+
 // A provider to compute return types for operator ()
 // Implicitly also disables the operator using SFINAE if the 
 // type isn't a function or function pointer type

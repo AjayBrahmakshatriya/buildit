@@ -169,8 +169,10 @@ public:
 	virtual bool needs_splitting(if_stmt::Ptr other) {
 		if (is_same(other))
 			return false;
+/*
 		if (static_offset != other->static_offset)
 			return false;
+*/
 		if (!then_stmt->is_same(other->then_stmt))
 			return false;
 		if (!else_stmt->is_same(other->else_stmt))
@@ -318,7 +320,7 @@ public:
 		a->visit(self<goto_stmt>());
 	}
 
-	label::Ptr label1;
+	label::Ptr label1 = nullptr;
 	tracer::tag temporary_label_number;
 
 	virtual bool is_same(block::Ptr other) override {
@@ -328,7 +330,7 @@ public:
 		if (label1 == nullptr) {
 			if (other_stmt->label1 != nullptr)
 				return false;
-			if (temporary_label_number != temporary_label_number)
+			if (temporary_label_number != other_stmt->temporary_label_number)
 				return false;
 		} else {
 			if (!label1->is_same(other_stmt->label1))
@@ -353,8 +355,14 @@ public:
 	stmt::Ptr body;
 	expr::Ptr cond;
 
-	// Extra metadata
+	// Extra metadata, not actually children of this while 
+	// stmt, TODO: Move this some analysis cache
+	// Currently this data is only accurately maintained between
+	// loop finder and for_loop finder. 
 	std::vector<stmt_block::Ptr> continue_blocks;
+	std::vector<stmt_block::Ptr> break_blocks;
+	std::vector<stmt_block::Ptr> implicit_continue_blocks;
+
 	virtual bool is_same(block::Ptr other) override {
 		if (!isa<while_stmt>(other))
 			return false;
@@ -564,6 +572,7 @@ public:
 	expr::Ptr return_val;
 
 	virtual bool is_same(block::Ptr other) override {
+		if (!isa<return_stmt>(other)) return false;
 		return_stmt::Ptr other_stmt = to<return_stmt>(other);
 		if (!return_val->is_same(other_stmt->return_val))
 			return false;

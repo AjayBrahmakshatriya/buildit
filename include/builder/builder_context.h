@@ -30,6 +30,10 @@ public:
 	std::string dynamic_header_includes = "";
 	bool enable_d2x = false;	
 
+
+	// Stats logging related fields
+	int last_num_runs = 0;
+
 	void extract_function_ast_impl(invocation_state*);
 	block::stmt::Ptr extract_ast_from_run(run_state*);
 
@@ -49,16 +53,6 @@ public:
 		// Establish a invocation state
 		invocation_state i_state = extract_signature<F>(func_input, std::forward<OtherArgs>(other_args)...);
 		i_state.b_ctx = this;
-		// Set the name of the function 
-		i_state.generated_func_decl->func_name = func_name;
-		extract_function_ast_impl(&i_state);
-		return i_state.generated_func_decl;
-	}
-
-	template <typename F, typename...Args>
-	block::stmt::Ptr extract_function_ast_union(F func_input, std::string func_name, Args&&...args) {
-		invocation_state i_state = extract_signature_union<F>(func_input, std::forward<Args>(args)...);
-		i_state.b_ctx = this;	
 		// Set the name of the function 
 		i_state.generated_func_decl->func_name = func_name;
 		extract_function_ast_impl(&i_state);

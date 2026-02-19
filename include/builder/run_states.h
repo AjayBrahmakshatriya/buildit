@@ -123,6 +123,9 @@ public:
 	template <typename T>
 	friend class static_var;
 
+	template <typename T>
+	friend void create_return_stmt(const dyn_var<T>& a);
+
 private:
 
 public:

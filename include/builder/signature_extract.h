@@ -31,20 +31,40 @@ void create_return_stmt(const dyn_var<T>& a) {
 	get_run_state()->commit_uncommitted();
 	if (get_run_state()->is_catching_up())
 		return;
+
+	// Perform a little on-the-fly RCE by trying to eliminate 
+	// the last variable creation
+	if (block::isa<block::var_expr>(e)) {
+		auto v = block::to<block::var_expr>(e)->var1;
+		if (get_run_state()->current_stmt_block->stmts.size() > 0) {
+			auto ls = get_run_state()->current_stmt_block->stmts.back();
+			if (block::isa<block::decl_stmt>(ls)) {
+				auto ds = block::to<block::decl_stmt>(ls);
+				if (ds->decl_var->is_same(v)) {
+					if (ds->init_expr != nullptr) {
+						e = ds->init_expr;
+						get_run_state()->current_stmt_block->stmts.pop_back();	
+					}
+				}
+			}
+		}
+	}
+
 	block::return_stmt::Ptr ret_stmt = std::make_shared<block::return_stmt>();
 	// ret_stmt->static_offset = a.block_expr->static_offset;
 	//  Finding conflicts between return statements is somehow really hard.
 	//  So treat each return statement as different. This is okay, because a
 	//  jump is as bad a return. Also no performance issues
-	ret_stmt->static_offset = tracer::get_unique_tag();
+	//ret_stmt->static_offset = tracer::get_unique_tag();
+	ret_stmt->static_offset = e->static_offset;
 	ret_stmt->return_val = e;
 	get_run_state()->add_stmt_to_current_block(ret_stmt, true);
 }
 
 template <typename T>
 void create_return_stmt(const builder_union<T>& a) {
-	if (a.var_mode == builder_union<T>::STATIC) {
-		return create_return_stmt((dyn_var<T>)a.cval);
+	if (a.var_mode != builder_union<T>::DYNAMIC) {
+		return create_return_stmt((dyn_var<T>)to_expr(a.get_as_concrete()));
 	} else {
 		return create_return_stmt(a.var);
 	}
@@ -81,9 +101,30 @@ struct extract_signature_impl<std::tuple<ProcessedArgTypes...>, std::tuple<NextA
 	}
 };
 
+// 1.5 When the argument is builder_union, which is like dyn_var but whether it is an argument depends on the value supplied
+template <typename...ProcessedArgTypes, typename NextArgWrap, typename...RemainingArgTypes, typename ReturnType>
+struct extract_signature_impl<std::tuple<ProcessedArgTypes...>, std::tuple<NextArgWrap, RemainingArgTypes...>, ReturnType, typename std::enable_if<is_builder_union<NextArgWrap>::value>::type> {
+	using NextArg = typename is_builder_union<NextArgWrap>::type;
+	// 1.5.1 Sub case, the parameter is of type placeholder
+	template <typename F, typename...OtherParams>	
+	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgTypes...processed_args, const placeholder& _, OtherParams&&...other_params) {
+		// We can just pretend it is dyn_var and reuse the implementation
+		extract_signature_impl<std::tuple<ProcessedArgTypes...>, std::tuple<dyn_var<NextArg>, RemainingArgTypes...>, ReturnType>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgTypes>(processed_args)..., std::forward<OtherParams>(other_params)...);
+	}
+	// 1.5.1 Sub case, the next parameter is NOT placholder
+	// this needs to be explcitly checked because const placeholder& is lower priority that rvalue references
+	template <typename F, typename NextParam, typename...OtherParams>
+	static typename std::enable_if<!std::is_same<typename std::remove_reference<NextParam>::type, placeholder>::value>::type fill_invocation (invocation_state* i_state, F func, int arg_index, ProcessedArgTypes...processed_args, NextParam&& next_param, OtherParams&&...other_params) {
+		// We can just call the regular implementation, by passing NextArg instead, but the issue is it will be passed by value which is annoying, 
+		// so we just inline the implementation here
+		extract_signature_impl<std::tuple<ProcessedArgTypes..., std::tuple<NextParam>>, std::tuple<RemainingArgTypes...>, ReturnType>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgTypes>(processed_args)..., std::tuple<NextParam>(std::forward<NextParam>(next_param)), std::forward<OtherParams>(other_params)...);
+	}
+	
+};
+
 // 2. When the next argumetn to process isn't a dyn_var
 template <typename...ProcessedArgTypes, typename NextArg, typename...RemainingArgTypes, typename ReturnType>
-struct extract_signature_impl<std::tuple<ProcessedArgTypes...>, std::tuple<NextArg, RemainingArgTypes...>, ReturnType, typename std::enable_if<!is_dyn_var_type<NextArg>::value>::type> {
+struct extract_signature_impl<std::tuple<ProcessedArgTypes...>, std::tuple<NextArg, RemainingArgTypes...>, ReturnType, typename std::enable_if<!is_dyn_var_type<NextArg>::value && !is_builder_union<NextArg>::value>::type> {
 	// This version needs a NextParam
 	template <typename F, typename NextParam, typename...OtherParams>
 	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgTypes...processed_args, NextParam&& next_param, OtherParams&&...other_params) {
@@ -167,49 +208,6 @@ invocation_state extract_signature(F func, OtherArgs&&... args) {
 	extract_signature_impl<std::tuple<>, ArgTypes, ReturnType>::fill_invocation(&i_state, func, 0, std::forward<OtherArgs>(args)...);
 
 	return i_state;	
-}
-
-template <typename RetType, typename...ProcessedArgs>
-struct extract_signature_union_impl {
-	// 1. Case 1, next arg is placeholder 
-	template <typename F, typename...OtherParams>
-	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs, const placeholder& _, OtherParams&&...other_params) {
-		std::string arg_name = "arg" + std::to_string(arg_index);
-		auto var = std::make_shared<block::var>();	
-		var->var_name = arg_name;
-		var->var_type = nullptr; // Leave the type unfilled here, it will be filled when grabbed by the builder_union
-		var->static_offset = tracer::get_unique_tag(); // The static tag on the var_type will also be set later
-		i_state->generated_func_decl->args.push_back(var);
-		extract_signature_union_impl<RetType, ProcessedArgs..., std::tuple<with_block_var>>::fill_invocation(i_state, func, arg_index + 1, std::forward<ProcessedArgs>(pargs)..., std::tuple<with_block_var>(with_block_var(var)), std::forward<OtherParams>(other_params)...);	
-	}
-
-	// 2. Case 2, next arg is a concrete val, it can just be forwarded as it is
-	// Disable this if NextArg is placeholder
-	template <typename F, typename NextArg, typename...OtherParams>
-	static typename std::enable_if<!std::is_same<typename std::remove_reference<NextArg>::type, placeholder>::value>::type fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs, NextArg&& na, OtherParams&&...other_params) {
-		extract_signature_union_impl<RetType, ProcessedArgs..., std::tuple<NextArg>>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgs>(pargs)..., std::tuple<NextArg>(std::forward<NextArg>(na)), std::forward<OtherParams>(other_params)...);
-	}
-	// 3. Case 3, all args are done
-	template <typename F>
-	static void fill_invocation(invocation_state* i_state, F func, int arg_index, ProcessedArgs...pargs) {
-		// We can fallback to the implementation without union	
-		extract_signature_impl<std::tuple<ProcessedArgs...>, std::tuple<>, RetType>::fill_invocation(i_state, func, arg_index, std::forward<ProcessedArgs>(pargs)...);
-	}
-};
-
-
-// For now we will use a separate interface and implementation for functions 
-// that use union types -- All input types should be builder_union/regular variables, no dyn_var
-template <typename F, typename...Args>
-invocation_state extract_signature_union(F func, Args&&...args) {
-	using ReturnType = typename f_type_helper<F>::ret_type;
-
-	auto func_decl = std::make_shared<block::func_decl>();
-	invocation_state i_state;
-	i_state.generated_func_decl = func_decl;
-	
-	extract_signature_union_impl<ReturnType>::fill_invocation(&i_state, func, 0, std::forward<Args>(args)...);
-	return i_state;
 }
 
 }

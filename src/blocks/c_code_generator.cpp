@@ -231,17 +231,27 @@ void c_code_generator::visit(int_const::Ptr a) {
 		oss << "ll";
 }
 void c_code_generator::visit(double_const::Ptr a) {
-	oss << std::setprecision(15);
-	oss << a->value;
-	if (floor(a->value) == a->value)
-		oss << ".0";
+        std::stringstream ss;
+        ss << std::setprecision(15);
+        ss << a->value;
+        std::string s = ss.str();
+        oss << s;
+        if (s.find('e') == std::string::npos && s.find('E') == std::string::npos) {
+                if (floor(a->value) == a->value)
+                        oss << ".0";
+        }
 }
 void c_code_generator::visit(float_const::Ptr a) {
-	oss << std::setprecision(15);
-	oss << a->value;
-	if (floor(a->value) == a->value)
-		oss << ".0";
-	oss << "f";
+        std::stringstream ss;
+        ss << std::setprecision(15);
+        ss << a->value;
+        std::string s = ss.str();
+        oss << s;
+        if (s.find('e') == std::string::npos && s.find('E') == std::string::npos) {
+                if (floor(a->value) == a->value)
+                        oss << ".0";
+        }
+        oss << "f";
 }
 static std::string escapeString(const std::string& input) {
     std::string output;
@@ -748,6 +758,7 @@ void c_code_generator::visit(goto_stmt::Ptr a) {
 	// a->dump(oss, 1);
 	oss << "goto ";
 	oss << a->label1->label_name << ";";
+	//oss << "// " << a->temporary_label_number.stringify() << " ";
 }
 void c_code_generator::visit(label_stmt::Ptr a) {
 	oss << a->label1->label_name << ":";
