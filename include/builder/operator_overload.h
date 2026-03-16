@@ -4,6 +4,9 @@
 #include <utility>
 namespace builder {
 
+template <typename T>
+class builder_union;
+
 // We use T& and not T in declval so that operators
 // that expect a lvalue like & also work
 template <typename T1, typename V=void>
@@ -32,6 +35,11 @@ struct allowed_types<T1, dyn_var<T2>> {
 	using type = void;
 };
 
+template <typename T1, typename T2>
+struct allowed_types<dyn_var<T1>, builder_union<T2>> {};
+
+template <typename T1, typename T2>
+struct allowed_types<builder_union<T1>, dyn_var<T2>> {};
 
 template <typename T, typename T1, typename T2>
 block::expr::Ptr binary_expr_helper(const T1& d1, const T2& d2) {

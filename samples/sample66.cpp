@@ -29,9 +29,9 @@ int main(int argc, char* argv[]) {
 	auto ast2 = ctx.extract_function_ast(power, "power2", arg(), 15);
 	auto ast3 = ctx.extract_function_ast(power, "power3", 2, arg());
 	auto ast4 = ctx.extract_function_ast(power, "power4", arg(), arg());
-	//block::c_code_generator::generate_code(ast1, std::cout, 0);
-	//block::c_code_generator::generate_code(ast2, std::cout, 0);
+	block::c_code_generator::generate_code(ast1, std::cout, 0);
+	block::c_code_generator::generate_code(ast2, std::cout, 0);
 	block::c_code_generator::generate_code(ast3, std::cout, 0);
-	//block::c_code_generator::generate_code(ast4, std::cout, 0);
+	block::c_code_generator::generate_code(ast4, std::cout, 0);
 	return 0;
 }

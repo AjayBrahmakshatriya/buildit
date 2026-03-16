@@ -17,7 +17,7 @@ struct initializer_selector<dyn_var<T>> {
 	typedef expr_wrapper type;
 };
 
-template <typename T, size_t size = 0>
+template <typename T, size_t t_size = 0>
 class array {
 private:
 	T *m_arr = nullptr;
@@ -25,8 +25,8 @@ private:
 
 public:
 	array() {
-		if (size) {
-			actual_size = size;
+		if (t_size) {
+			actual_size = t_size;
 			m_arr = (T *)new char[sizeof(T) * actual_size];
 			for (static_var<size_t> i = 0; i < actual_size; i++) {
 				new (m_arr + i) T();
@@ -49,8 +49,8 @@ public:
 	// We need a SFINAE constructor of anything that is convertible to T
 	// but let's stick with T for now
 	array(const std::initializer_list<typename initializer_selector<T>::type> &init) {
-		if (size) {
-			actual_size = size;
+		if (t_size) {
+			actual_size = t_size;
 		} else {
 			actual_size = init.size();
 		}
@@ -63,9 +63,8 @@ public:
 		}
 	}
 
-
 	void set_size(size_t new_size) {
-		assert(size == 0 && "set_size should be only called for dyn_arr without size");
+		assert(t_size == 0 && "set_size should be only called for dyn_arr without size");
 		assert(m_arr == nullptr && "set_size should be only called once");
 		actual_size = new_size;
 		m_arr = (T *)new char[sizeof(T) * actual_size];
@@ -76,8 +75,8 @@ public:
 
 	template <typename T2, size_t N>
 	void initialize_from_other(const array<T2, N> &other) {
-		if (size) {
-			actual_size = size;
+		if (t_size) {
+			actual_size = t_size;
 		} else {
 			actual_size = other.actual_size;
 		}
@@ -107,6 +106,10 @@ public:
 	const T &operator[](size_t index) const {
 		assert(m_arr != nullptr && "Should call set_size for arrays that don't have a size");
 		return m_arr[index];
+	}
+	
+	size_t size() {
+		return actual_size;
 	}
 
 	~array() {

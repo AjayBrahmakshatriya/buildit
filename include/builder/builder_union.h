@@ -148,6 +148,7 @@ public:
 
 		if (var_mode == STATIC_CONST) {
 			// static const can never be assigned, immediately promote it to DYNAMIC
+			// limit constraints SHOULD throw otherwise we might get stuck in an infinite loop
 			needs_dynamic.require_val(true_top::T);
 			// This assert should never hit
 			assert(false && "Static const can never be assigned");		
@@ -158,6 +159,7 @@ public:
 		// Check early if variable needs promotion		
 		if (var_mode == STATIC) {
 			if (assign_count > assign_count_max) {
+				// limit constraints SHOULD throw otherwise we might get stuck in an infinite loop
 				needs_dynamic.require_val(true_top::T);
 				// This assert should never hit
 				assert(false && "Static variable hit the max limit");		
@@ -165,7 +167,10 @@ public:
 			if (other.var_mode == DYNAMIC) {
 				// This is a contradiction, we can simply 
 				// propogate the information above
+				//needs_dynamic.require_val_no_throw(true_top::T);
 				needs_dynamic.require_val(true_top::T);
+				// Return so that the bad implementation doesn't run
+				return *this;
 				// This assert should never hit
 				assert(false && "Static variable cannot be assigned from dynamic");	
 			}	
@@ -236,7 +241,18 @@ struct allowed_union_types<T1, builder_union<T2>> {
 	using up_type1 = builder_union<T1>;
 	using up_type2 = const builder_union<T2>&;
 };
-
+template <typename T1, typename T2>
+struct allowed_union_types<builder_union<T1>, dyn_var<T2>> {
+	using type = void;
+	using up_type1 = const builder_union<T1>&;
+	using up_type2 = builder_union<T2>;
+};
+template <typename T1, typename T2>
+struct allowed_union_types<dyn_var<T1>, builder_union<T2>> {
+	using type = void;
+	using up_type1 = builder_union<T1>;
+	using up_type2 = const builder_union<T2>&;
+};
 
 #define BINARY_OPERATOR(op, op_name) \
 template <typename T1, typename T2,  \

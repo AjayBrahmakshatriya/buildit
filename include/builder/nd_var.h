@@ -110,17 +110,17 @@ public:
 		throw NonDeterministicFailureException();
 	}
 
+	void require_val_no_throw (typename T::value_type e) {
+		// If the required value is compatible with the current state, 
+		// return 
+		if (val->check(e)) return;
+		// Otherwise, merge update, but don't throw
+		// just record that this run also didn't succeed
+		// and we need a rerun
+		get_run_state()->set_needs_nd_rerun();
+	}
 };
 
-
-
-template <typename Lattice>
-class prophecy_var {
-	public:
-		prophecy_var(Lattice::value_type v = Lattice::bottom);
-		void requires_atleast(Lattice::value_type v);
-		bool is_atmost(Lattice::value_type v);
-}
 
 }
 

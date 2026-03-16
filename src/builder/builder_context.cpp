@@ -50,8 +50,12 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 #endif
 	block::stmt::Ptr ast = nullptr;
 	// Repeat till ND vars are happy
+
+	int nd_count = 0;
+
 	while (1) {
 		try {
+			nd_count++;
 			// Allocate one execution_state for this ND run
 			execution_state e_state (i_state);
 			// Allocate one run_state, rest will be allocated by the recursive calls
@@ -69,6 +73,7 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 		}
 		break;
 	}
+	std::cerr << "Final ND runs = " << nd_count << std::endl;
 
 	// Before making any changes, untangle the whole AST
 	ast = clone(ast);
@@ -103,7 +108,12 @@ void builder_context::extract_function_ast_impl(invocation_state* i_state) {
 	block::if_flattener flattener(false);
 	ast->accept(&flattener);
 	
-	if (!feature_unstructured) {
+	// Run a pre-loop extraction RCE to help with loop extraction
+	if (run_rce) {
+		block::eliminate_redundant_vars(ast);
+	}
+	
+	if (!feature_unstructured ) {
 
 		block::basic_block::cfg_block BBs = generate_basic_blocks(block::to<block::stmt_block>(ast));
 		
@@ -164,10 +174,21 @@ block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
 		// function();
 		lambda_wrapper(r_state->i_state->invocation_function);
 		r_state->commit_uncommitted();
+		// If the run state has had an nd var fault that has not been thrown, 
+		// throw now
+		if (r_state->needs_nd_rerun) {
+			throw NonDeterministicFailureException();	
+		}
 		ret_ast = ast;
 		get_invocation_state()->get_arena()->reset_arena();
 		run_state::current_run_state = nullptr;
 	} catch (OutOfBoolsException &e) {
+
+		// If the run state has had an nd var fault that has not been thrown, 
+		// throw now
+		if (r_state->needs_nd_rerun) {
+			throw NonDeterministicFailureException();	
+		}
 
 		// Reset dyn_var arena before starting new runs
 		get_invocation_state()->get_arena()->reset_arena();
@@ -218,6 +239,11 @@ block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
 
 		ret_ast = ast;
 	} catch (LoopBackException &e) {
+		// If the run state has had an nd var fault that has not been thrown, 
+		// throw now
+		if (r_state->needs_nd_rerun) {
+			throw NonDeterministicFailureException();	
+		}
 		get_invocation_state()->get_arena()->reset_arena();
 		run_state::current_run_state = nullptr;
 		block::goto_stmt::Ptr goto_stmt = std::make_shared<block::goto_stmt>();
@@ -227,6 +253,11 @@ block::stmt::Ptr builder_context::extract_ast_from_run(run_state* r_state) {
 		r_state->add_stmt_to_current_block(goto_stmt, false);
 		ret_ast = ast;
 	} catch (MemoizationException &e) {
+		// If the run state has had an nd var fault that has not been thrown, 
+		// throw now
+		if (r_state->needs_nd_rerun) {
+			throw NonDeterministicFailureException();	
+		}
 		get_invocation_state()->get_arena()->reset_arena();
 		run_state::current_run_state = nullptr;
 		if (feature_unstructured) {

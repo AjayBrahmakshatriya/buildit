@@ -75,6 +75,7 @@ private:
 	std::vector<static_var_base*> static_var_tuples;
 	std::vector<static_var_base*> deferred_static_var_tuples;
 	
+	bool needs_nd_rerun = false;
 
 	/* Memoization related fields */
 	
@@ -111,6 +112,9 @@ public:
 		std::set<std::string> to_ret = current_annotations;
 		current_annotations.clear();
 		return to_ret;
+	}
+	void set_needs_nd_rerun(void) {
+		needs_nd_rerun = true;
 	}
 
 	void insert_live_dyn_var(const tracer::tag& new_tag);
