@@ -5,17 +5,24 @@
 
 namespace builder {
 
+static bool is_factory_frozen(void);
+class true_top;
+
 class tag_factory {
 	std::unordered_map<tracer::tag, tracer::tag_id> internal_map;
 	tracer::tag_id next_id = 1;
 public:
-	tracer::tag_id create_tag_id (const tracer::tag& t) {
+	tracer::tag_id create_tag_id_helper (const tracer::tag& t) {
+		if (is_factory_frozen()) return 0;
 		auto it = internal_map.find(t);
 		if (it != internal_map.end()) 
 			return it->second;
 		internal_map[t] = next_id++;
 		return next_id - 1;
 	}
+	tracer::tag_id create_tag_id (const tracer::tag& t) { return create_tag_id_helper(t); }
+
+	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
 };
 
 }

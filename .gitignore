@@ -2,3 +2,5 @@ build/*
 *.swp
 scratch/*
 Makefile.inc
+.codex
+SUMMARY.md

@@ -119,6 +119,10 @@ tag get_unique_tag(void) {
 	return new_tag;
 }
 
+tag get_offset_for_nd_var(void) {
+	return get_offset_in_function();
+}
+
 
 
 bool tag::operator==(const tag &other) const {

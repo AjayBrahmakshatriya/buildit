@@ -38,7 +38,11 @@ class builder_union {
 public:
 	dyn_var<T> var;
 	static_var<T> cval;
+	static_var<true_top*> nd_marker;
 	T ccval;
+	nd_var<true_top> needs_dynamic = true_top::F;
+	tracer::tag reserved_live_dyn_tag;
+	bool has_reserved_live_dyn_tag = false;
 
 	enum mode {
 		STATIC,
@@ -51,12 +55,32 @@ public:
 		DYNAMIC,
 	} var_mode;
 	
-	nd_var<true_top> needs_dynamic = true_top::F;
-
 	// Maximum states this variable can take 
 	// before it is promoted to dynamic
 	constexpr static int assign_count_max = 16;
 	int assign_count = 0;
+
+	void init_static_tracking(void) {
+		nd_marker.deferred_init(needs_dynamic.get());
+	}
+	void reserve_live_dyn_tag(void) {
+		if (has_reserved_live_dyn_tag || !is_under_run()) return;
+		reserved_live_dyn_tag = tracer::get_offset_in_function();
+		get_run_state()->insert_live_dyn_var(reserved_live_dyn_tag);
+		has_reserved_live_dyn_tag = true;
+	}
+	void remove_materialized_dyn_live_tag(void) {
+		if (!is_under_run() || var.block_var == nullptr) return;
+		get_run_state()->remove_live_dyn_var(var.block_var->static_offset);
+	}
+	template <typename...Args>
+	void init_static_value(const Args&...args) {
+		init_static_tracking();
+		cval.deferred_init(args...);
+	}
+	void purge_from_nd_tags(bool has_value_snapshot = true) {
+		purge_marker_from_nd_state(needs_dynamic.get(), has_value_snapshot);
+	}
 
 	// This is the behavior for most
 	// constructor except when explicitly initialized
@@ -65,6 +89,7 @@ public:
 	// the user has to initialize after
 	template <typename...Args>
 	void check_and_init(const Args&...args) {
+		reserve_live_dyn_tag();
 		// First try to guess if this needs dynamic in the future
 		// var_mode never changes so we never need to reinit different state
 		// It probably makes sense to put the variables into a variant 
@@ -73,10 +98,11 @@ public:
 			var_mode = DYNAMIC;
 			// Regular defer init the dynamic variable
 			var.deferred_init(args...);
+			remove_materialized_dyn_live_tag();
 		} else {
 			// Initialize as STATIC, 
 			var_mode = STATIC;
-			cval.deferred_init(args...);
+			init_static_value(args...);
 		}
 		
 	}
@@ -91,16 +117,21 @@ public:
 
 public:
 	
-	builder_union(): var(defer_init()), cval(defer_init()) {
+	builder_union(): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
 		check_and_init();
 		// Uninitialized
 	}
 
-	builder_union(const builder_union& other): var(defer_init()), cval(defer_init()) {
-		// If RHS is dynamic, we are dynamic too, no need to look at guesses
+	builder_union(const builder_union& other): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
+		reserve_live_dyn_tag();
 		if (other.var_mode == DYNAMIC) {
+			if (needs_dynamic.get()->value != true_top::T) {
+				purge_from_nd_tags();
+				needs_dynamic.require_val(true_top::T);
+			}
 			var_mode = DYNAMIC;
 			var.deferred_init(other.var);
+			remove_materialized_dyn_live_tag();
 		} else {
 			// If RHS is static, we do the regular init
 			check_and_init(other.get_as_concrete());
@@ -111,37 +142,47 @@ public:
 
 	// If it is a dyn_var, there is no check
 	template <typename TO>
-	builder_union(const dyn_var<TO>& other_var): var(other_var), cval(defer_init()) {
+	builder_union(const dyn_var<TO>& other_var): var(other_var), cval(defer_init()), nd_marker(defer_init()) {
 		var_mode = DYNAMIC;
+		remove_materialized_dyn_live_tag();
 	}
 	// With block var works exactly the same, but it also sets the type
-	builder_union(const with_block_var& bv): var(bv), cval(defer_init()) {
+	builder_union(const with_block_var& bv): var(bv), cval(defer_init()), nd_marker(defer_init()) {
 		var_mode = DYNAMIC;
+		remove_materialized_dyn_live_tag();
 	}
 
 	template <typename TO>
-	builder_union(dyn_var<TO>&& other_var): var(std::move(other_var)), cval(defer_init()) {
+	builder_union(dyn_var<TO>&& other_var): var(std::move(other_var)), cval(defer_init()), nd_marker(defer_init()) {
 		var_mode = DYNAMIC;
+		remove_materialized_dyn_live_tag();
 	}
 	
 	// If it is a constant, still call check and init, ccval needs to be initialized after
-	builder_union(const T& v): var(defer_init()), cval(defer_init()) {
+	builder_union(const T& v): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
 		check_and_init(v);
 	}
 
 	// Special constructor when the value is an PRVALUE
-	builder_union(const builder_as_const_t<T>& v): var(defer_init()), cval(defer_init()) {
+	builder_union(const builder_as_const_t<T>& v): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
 		// Can still be dynamic, so we will have to check		
 		if (needs_dynamic.get()->value == true_top::T) {
 			var_mode = DYNAMIC;
 			// Regular defer init the dynamic variable
 			var.deferred_init(v.val);
+			remove_materialized_dyn_live_tag();
 		} else {
 			// Initialize as STATIC_CONST
 			var_mode = STATIC_CONST;
 			ccval = v.val;
 		}
 	}	
+
+	~builder_union() {
+		if (has_reserved_live_dyn_tag && is_under_run()) {
+			get_run_state()->remove_live_dyn_var(reserved_live_dyn_tag);
+		}
+	}
 	
 	builder_union& operator=(const builder_union& other) {
 		if (this == other.addr()) return *this;
@@ -160,6 +201,7 @@ public:
 		if (var_mode == STATIC) {
 			if (assign_count > assign_count_max) {
 				// limit constraints SHOULD throw otherwise we might get stuck in an infinite loop
+				purge_from_nd_tags();
 				needs_dynamic.require_val(true_top::T);
 				// This assert should never hit
 				assert(false && "Static variable hit the max limit");		
@@ -168,6 +210,7 @@ public:
 				// This is a contradiction, we can simply 
 				// propogate the information above
 				//needs_dynamic.require_val_no_throw(true_top::T);
+				purge_from_nd_tags();
 				needs_dynamic.require_val(true_top::T);
 				// Return so that the bad implementation doesn't run
 				return *this;
@@ -187,6 +230,29 @@ public:
 			}
 		}
 
+		return *this;
+	}
+	template <typename TO>
+	builder_union& operator=(const dyn_var<TO>& other) {
+		if (var_mode == STATIC_CONST) {
+			needs_dynamic.require_val(true_top::T);
+			assert(false && "Static const can never be assigned");
+		}
+
+		assign_count++;
+
+		if (var_mode == STATIC) {
+			if (assign_count > assign_count_max) {
+				purge_from_nd_tags();
+				needs_dynamic.require_val(true_top::T);
+				assert(false && "Static variable hit the max limit");
+			}
+			purge_from_nd_tags();
+			needs_dynamic.require_val(true_top::T);
+			return *this;
+		}
+
+		var = other;
 		return *this;
 	}
 	explicit operator bool () {

@@ -42,6 +42,7 @@ class execution_state;
 class invocation_state;
 class builder_context;
 class nd_var_base;
+class true_top;
 
 class run_state {
 public:
@@ -90,7 +91,10 @@ private:
 	execution_state* e_state;
 	invocation_state* i_state;
 
+
+
 public:
+	bool factory_frozen = false;
 	// Run state cannot be created without parent states
 	run_state(execution_state* e_state, invocation_state* i_state): e_state(e_state), i_state(i_state) {}	
 
@@ -124,6 +128,8 @@ public:
 	friend class invocation_state;
 	friend class builder_context;
 	friend tracer::tag tracer::get_offset_in_function(void);
+	friend tracer::tag tracer::get_offset_for_nd_var(void);
+	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
 	template <typename T>
 	friend class static_var;
 
@@ -200,15 +206,23 @@ public:
 	template <typename T, typename...Args>
 	friend std::shared_ptr<T> get_or_create_generator(tracer::tag req_tag, Args&&...args);
 
+	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+
 public:
 	dyn_var_arena* get_arena(void) {
 		return &var_arena;
 	}
 };
 
+void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+
+
 static inline run_state* get_run_state(void) {
 	assert(run_state::current_run_state != nullptr);
 	return run_state::current_run_state;	
+}
+static bool is_factory_frozen(void) {
+	return get_run_state()->factory_frozen;
 }
 
 static inline bool is_under_run(void) {

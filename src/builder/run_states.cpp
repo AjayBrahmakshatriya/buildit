@@ -1,7 +1,94 @@
 #include "builder/run_states.h"
 #include "builder/exceptions.h"
+#include "builder/nd_var.h"
+#include "builder/var_snapshots.h"
 #include <algorithm>
+#include <functional>
 namespace builder {
+
+namespace {
+
+tracer::tag purge_marker_from_tag(const tracer::tag& original, true_top* marker_value, bool purge_next_snapshot) {
+	tracer::tag new_tag = original;
+	for (unsigned i = 0; i < new_tag.static_var_snapshots.size(); i++) {
+		auto marker_snapshot =
+			std::dynamic_pointer_cast<static_var_snapshot<true_top*>>(new_tag.static_var_snapshots[i]);
+		if (!marker_snapshot || marker_snapshot->snapshot != marker_value) {
+			continue;
+		}
+		new_tag.static_var_snapshots.erase(new_tag.static_var_snapshots.begin() + i);
+		if (purge_next_snapshot && i < new_tag.static_var_snapshots.size()) {
+			new_tag.static_var_snapshots.erase(new_tag.static_var_snapshots.begin() + i);
+		}
+		break;
+	}
+	new_tag.cached_string = "";
+	new_tag.cached_hash = 0;
+	return new_tag;
+}
+
+void normalize_live_dyn_vars(std::vector<tracer::tag_id>& live_dyn_vars) {
+	std::sort(live_dyn_vars.begin(), live_dyn_vars.end());
+	live_dyn_vars.erase(std::unique(live_dyn_vars.begin(), live_dyn_vars.end()), live_dyn_vars.end());
+}
+
+void merge_nd_entries(std::unordered_map<tracer::tag, std::shared_ptr<nd_var_base>>& rewritten,
+		const tracer::tag& new_tag, const std::shared_ptr<nd_var_base>& value) {
+	auto existing = rewritten.find(new_tag);
+	if (existing == rewritten.end()) {
+		rewritten[new_tag] = value;
+		return;
+	}
+
+	auto existing_true_top = std::dynamic_pointer_cast<true_top>(existing->second);
+	auto new_true_top = std::dynamic_pointer_cast<true_top>(value);
+	if (existing_true_top && new_true_top) {
+		if (new_true_top->value == true_top::T) {
+			existing_true_top->merge(true_top::T);
+		}
+		return;
+	}
+
+	assert(existing->second == value && "Cannot merge different nd_var lattice values");
+}
+
+tracer::tag_id rewrite_tag_id_recursive(
+		tracer::tag_id old_id,
+		true_top* marker_value,
+		bool purge_next_snapshot,
+		const std::unordered_map<tracer::tag_id, tracer::tag>& old_id_to_tag,
+		tag_factory& new_factory,
+		std::unordered_map<tracer::tag_id, tracer::tag_id>& old_id_to_new_id) {
+	auto memo_it = old_id_to_new_id.find(old_id);
+	if (memo_it != old_id_to_new_id.end()) {
+		return memo_it->second;
+	}
+
+	auto old_tag_it = old_id_to_tag.find(old_id);
+	if (old_tag_it == old_id_to_tag.end()) {
+		return old_id;
+	}
+
+	tracer::tag rewritten_tag = purge_marker_from_tag(old_tag_it->second, marker_value, purge_next_snapshot);
+	for (auto& live_id : rewritten_tag.live_dyn_vars) {
+		live_id = rewrite_tag_id_recursive(
+			live_id,
+			marker_value,
+			purge_next_snapshot,
+			old_id_to_tag,
+			new_factory,
+			old_id_to_new_id);
+	}
+	normalize_live_dyn_vars(rewritten_tag.live_dyn_vars);
+	rewritten_tag.cached_string = "";
+	rewritten_tag.cached_hash = 0;
+
+	tracer::tag_id new_id = new_factory.create_tag_id(rewritten_tag);
+	old_id_to_new_id[old_id] = new_id;
+	return new_id;
+}
+
+}
 
 run_state* run_state::current_run_state = nullptr;
 
@@ -149,7 +236,6 @@ bool run_state::get_next_bool(block::expr::Ptr expr) {
 }
 
 void run_state::insert_live_dyn_var(const tracer::tag& t) {
-	return;
 	// First convert the tag to tag_id using the invocation's tag factory
 	tracer::tag_id tid = i_state->tag_factory_instance.create_tag_id(t);
 	// Insert it into the live set and sort
@@ -157,7 +243,6 @@ void run_state::insert_live_dyn_var(const tracer::tag& t) {
 	std::sort(live_dyn_vars.begin(), live_dyn_vars.end());
 }
 void run_state::remove_live_dyn_var(const tracer::tag& t) {
-	return;
 	// First convert the tag to tag_id using the invocation's tag factory
 	tracer::tag_id tid = i_state->tag_factory_instance.create_tag_id(t);
 
@@ -169,6 +254,49 @@ void run_state::remove_live_dyn_var(const tracer::tag& t) {
 		// Erase it. This shifts all subsequent elements left.
 		live_dyn_vars.erase(it); 
 	}	
+}
+
+void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot) {
+	auto i_state = get_invocation_state();
+	auto old_factory = i_state->tag_factory_instance;
+	std::unordered_map<tracer::tag_id, tracer::tag> old_id_to_tag;
+	for (const auto& entry : old_factory.internal_map) {
+		old_id_to_tag[entry.second] = entry.first;
+	}
+
+	tag_factory new_factory;
+	std::unordered_map<tracer::tag_id, tracer::tag_id> old_id_to_new_id;
+
+	for (const auto& entry : old_factory.internal_map) {
+		rewrite_tag_id_recursive(
+			entry.second,
+			marker_value,
+			purge_next_snapshot,
+			old_id_to_tag,
+			new_factory,
+			old_id_to_new_id);
+	}
+
+	std::unordered_map<tracer::tag, std::shared_ptr<nd_var_base>> rewritten_nd_state;
+	for (auto &entry: i_state->nd_state_map) {
+		tracer::tag new_tag = purge_marker_from_tag(entry.first, marker_value, purge_next_snapshot);
+		for (auto& live_id : new_tag.live_dyn_vars) {
+			auto remapped = old_id_to_new_id.find(live_id);
+			if (remapped != old_id_to_new_id.end()) {
+				live_id = remapped->second;
+			}
+		}
+		normalize_live_dyn_vars(new_tag.live_dyn_vars);
+		new_tag.cached_string = "";
+		new_tag.cached_hash = 0;
+		merge_nd_entries(rewritten_nd_state, new_tag, entry.second);
+	}
+
+	i_state->tag_factory_instance = std::move(new_factory);
+	i_state->nd_state_map.swap(rewritten_nd_state);
+	get_run_state()->live_dyn_vars.clear();
+
+	get_run_state()->factory_frozen = true;
 }
 
 }

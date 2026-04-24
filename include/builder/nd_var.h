@@ -36,6 +36,7 @@ public:
 	bool merge(int e) {
 		assert(false && "Every deried type must define merge");
 	}	
+	virtual ~nd_var_base() {}
 };
 
 template <typename T, typename...Args>
@@ -72,16 +73,20 @@ public:
 	}
 };
 
-
 template <typename T>
 class nd_var {
 	static_assert(std::is_base_of<nd_var_base, T>::value, "Types wrapped in nd_var must derive from nd_var_base");
 	std::shared_ptr<T> val;	
 	tracer::tag t_cached;
 public:
+	nd_var() {
+		tracer::tag t = tracer::get_offset_for_nd_var();
+		t_cached = t;
+		val = get_or_create_generator<T>(t);
+	}
 	template <typename...Args>
 	nd_var(Args&&...args) {
-		tracer::tag t = tracer::get_offset_in_function();
+		tracer::tag t = tracer::get_offset_for_nd_var();
 		t_cached = t;
 		val = get_or_create_generator<T>(t, std::forward<Args>(args)...);
 	}
@@ -100,7 +105,6 @@ public:
 	const T* get(void) const {
 		return val.get();
 	}
-
 	void require_val(typename T::value_type e) {
 		// If the required value is compatible with the current state, 
 		// return 
@@ -120,7 +124,6 @@ public:
 		get_run_state()->set_needs_nd_rerun();
 	}
 };
-
 
 }
 

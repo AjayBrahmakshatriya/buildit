@@ -20,6 +20,9 @@ namespace builder {
 template <typename T>
 class dyn_var;
 
+template <typename T>
+class builder_union;
+
 // Non-typed base class for all dyn_vars
 class dyn_var_base {
 protected:
@@ -57,6 +60,9 @@ public:
 	
 	template <typename T>
 	friend class dyn_var;
+
+	template <typename T>
+	friend class builder_union;
 
 	template <typename T>
 	friend void resize_arr(const dyn_var<T[]> &x, int size);
@@ -150,7 +156,7 @@ private:
 		auto t = create_block_var();	
 		create_var_decl_stmt(init_expr, t);
 	}
-	void move_from (const dyn_var_impl& other) {
+	void move_from (dyn_var_impl&& other) {
 		var_mode = other.var_mode;
 		block_var = other.block_var;
 		block_decl_stmt = other.block_decl_stmt;
@@ -158,6 +164,9 @@ private:
 		block_expr = other.block_expr;
 		user_defined_members = other.user_defined_members;			
 		member_counter = other.member_counter;
+		other.block_var = nullptr;
+		other.block_decl_stmt = nullptr;
+		other.block_expr = nullptr;
 	}
 public:
 	// An alias to help signature identifer 
@@ -172,7 +181,7 @@ public:
 		copy_types_provider(*this, other);
 	}
 	dyn_var_impl(dyn_var_impl&& other) { // Move constructor to simply steal resources
-		move_from(other);
+		move_from(std::move(other));
 	}
 	// This constructor uses dyn_var<TO> on the RHS
 	// because it will never ever be dyn_var_impl
@@ -330,7 +339,7 @@ public:
 	// A second deferred init to handle any existing constructors
 	template <typename TO>
 	void deferred_init(const TO& other) {
-		move_from(dyn_var_impl<T>(other));		
+		move_from(dyn_var_impl<T>(other));
 	}
 	void add_attribute(std::string s) {
 		std::vector<std::string> attrs;
@@ -366,7 +375,7 @@ public:
 	// Some constructors and operators that need to be defined
 	dyn_var(): dyn_var_impl<T>() {}
 	dyn_var(const dyn_var& other): dyn_var_impl<T>(other) {}	
-	dyn_var(const dyn_var&& other): dyn_var_impl<T>(std::move((dyn_var_impl<T>&)other)) {}
+	dyn_var(dyn_var&& other): dyn_var_impl<T>(std::move((dyn_var_impl<T>&)other)) {}
 	dyn_var<T>& operator=(const dyn_var<T>& other) {
 		return dyn_var_impl<T>::operator=(other);
 	}

@@ -108,6 +108,7 @@ public:
 tag get_unique_tag(void);
 
 tag get_offset_in_function(void);
+tag get_offset_for_nd_var(void);
 
 } // namespace tracer
 
