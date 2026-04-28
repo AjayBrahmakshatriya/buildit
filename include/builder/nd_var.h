@@ -4,14 +4,13 @@
 #include "builder/static_var.h"
 #include "util/tracer.h"
 #include "builder/exceptions.h"
-
 namespace builder {
 
 /* The new API for nd_var-able objects is simple
    We require the objects to follow data-flow lattice properties
    Each ND var wrapped T can have whatever state it wants, but it needs to derive from 
-   nd_var_base (we don't need to have separate generators any more).
-   nd_var_base objects will go across executions and will be stored
+   nd_node_base (we don't need to have separate generators any more).
+   nd_node_base objects will go across executions and will be stored
    in the invocation state. 
 
    The type T however needs to provide two functions : check(int) which checks if 
@@ -23,9 +22,9 @@ namespace builder {
 // Base class for nd_var wrappable objects
 // We are not making any functions virtual but we declare them here to make sure 
 // users declare them too
-class nd_var_base {
+class nd_node_base {
 protected: 
-	nd_var_base() = default;
+	nd_node_base() = default;
 public:
 	using value_type = void;
 
@@ -36,7 +35,37 @@ public:
 	bool merge(int e) {
 		assert(false && "Every deried type must define merge");
 	}	
-	virtual ~nd_var_base() {}
+	virtual ~nd_node_base() {}
+};
+
+template <typename Derived>
+class nd_node: public nd_node_base {
+protected:
+	nd_node() = default;
+public:
+	using derived_type = Derived;
+	std::vector<std::weak_ptr<Derived>> dependents;
+
+	void add_dependent(const std::shared_ptr<Derived>& dep) {
+		dependents.push_back(dep);
+	}
+
+	template <typename ValueType>
+	void propagate_requires_atleast(ValueType e) {
+		Derived* self = static_cast<Derived*>(this);
+		if (self->check(e)) return;
+		self->merge(e);
+		self->changed();
+		auto new_value = self->get_value();
+		for (auto& weak_dep : dependents) {
+			auto dep = weak_dep.lock();
+			if (!dep) continue;
+			dep->propagate_requires_atleast(new_value);
+		}
+	}
+
+	void changed() {}
+	static void finalize_updates() {}
 };
 
 template <typename T, typename...Args>
@@ -48,7 +77,7 @@ std::shared_ptr<T> get_or_create_generator(tracer::tag req_tag, Args&&...args) {
 }
 
 // A simple true at top boolean nd_var wrappable type
-class true_top: public nd_var_base {
+class true_top: public nd_node<true_top> {
 public:
 	typedef enum {
 		T = 1,
@@ -61,6 +90,7 @@ public:
 	
 	true_top(value_t def): value(def) {}
 	true_top(): value(F) {}
+	value_t get_value() const { return value; }
 
 	bool check(value_t e) {
 		if (value == T) return true;
@@ -75,9 +105,10 @@ public:
 
 template <typename T>
 class nd_var {
-	static_assert(std::is_base_of<nd_var_base, T>::value, "Types wrapped in nd_var must derive from nd_var_base");
+	static_assert(std::is_base_of<nd_node_base, T>::value, "Types wrapped in nd_var must derive from nd_node_base");
 	std::shared_ptr<T> val;	
 	tracer::tag t_cached;
+private:
 public:
 	nd_var() {
 		tracer::tag t = tracer::get_offset_for_nd_var();
@@ -110,7 +141,15 @@ public:
 		// return 
 		if (val->check(e)) return;
 		// Otherwise, merge update and throw
-		val->merge(e);
+		val->propagate_requires_atleast(e);
+		T::finalize_updates();
+		throw NonDeterministicFailureException();
+	}
+	void require_val(const nd_var<T>& other) {
+		other.val->add_dependent(val);
+		if (val->check(other.val->get_value())) return;
+		val->propagate_requires_atleast(other.val->get_value());
+		T::finalize_updates();
 		throw NonDeterministicFailureException();
 	}
 
@@ -118,8 +157,7 @@ public:
 		// If the required value is compatible with the current state, 
 		// return 
 		if (val->check(e)) return;
-		// Otherwise, merge update, but don't throw
-		// just record that this run also didn't succeed
+		// Otherwise, record that this run also didn't succeed
 		// and we need a rerun
 		get_run_state()->set_needs_nd_rerun();
 	}

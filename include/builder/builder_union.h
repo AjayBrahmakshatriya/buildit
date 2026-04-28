@@ -4,6 +4,7 @@
 #include "builder/dyn_var.h"
 #include "builder/static_var.h"
 #include "builder/nd_var.h"
+#include <algorithm>
 
 namespace builder {
 
@@ -31,6 +32,47 @@ builder_as_const_t<T> builder_as_const(const T& v) {
 	return builder_as_const_t<T>(v);
 }
 
+class builder_union_top: public nd_node<builder_union_top> {
+public:
+	typedef enum {
+		T = 1,
+		F = 0,
+	} value_t;
+
+	value_t value;
+	static std::vector<builder_union_top*> changed_nodes;
+
+	using value_type = value_t;
+
+	builder_union_top(value_t def): value(def) {}
+	builder_union_top(): value(F) {}
+	value_t get_value() const { return value; }
+	void changed() {
+		for (auto* entry : changed_nodes) {
+			if (entry == this) {
+				return;
+			}
+		}
+		changed_nodes.push_back(this);
+	}
+
+	bool check(value_t e) {
+		if (value == T) return true;
+		if (e == value) return true;
+		return false;
+	}
+	void merge(value_t e) {
+		if (e == F) return;
+		value = e;
+	}
+
+	static void finalize_updates() {
+		purge_markers_from_nd_state(changed_nodes);
+		changed_nodes.clear();
+		if (is_under_run()) get_run_state()->factory_frozen = true;
+	}
+};
+
 // builder_union doesn't inherit
 // from dyn_var but wraps around it
 template <typename T>
@@ -38,9 +80,9 @@ class builder_union {
 public:
 	dyn_var<T> var;
 	static_var<T> cval;
-	static_var<true_top*> nd_marker;
+	static_var<builder_union_top*> nd_marker;
 	T ccval;
-	nd_var<true_top> needs_dynamic = true_top::F;
+	nd_var<builder_union_top> needs_dynamic = builder_union_top::F;
 	tracer::tag reserved_live_dyn_tag;
 	bool has_reserved_live_dyn_tag = false;
 
@@ -79,7 +121,8 @@ public:
 		cval.deferred_init(args...);
 	}
 	void purge_from_nd_tags(bool has_value_snapshot = true) {
-		purge_marker_from_nd_state(needs_dynamic.get(), has_value_snapshot);
+		(void) has_value_snapshot;
+		purge_markers_from_nd_state({needs_dynamic.get()});
 	}
 
 	// This is the behavior for most
@@ -94,7 +137,7 @@ public:
 		// var_mode never changes so we never need to reinit different state
 		// It probably makes sense to put the variables into a variant 
 		// TODO: Future improvement
-		if (needs_dynamic.get()->value == true_top::T) {
+		if (needs_dynamic.get()->value == builder_union_top::T) {
 			var_mode = DYNAMIC;
 			// Regular defer init the dynamic variable
 			var.deferred_init(args...);
@@ -125,14 +168,11 @@ public:
 	builder_union(const builder_union& other): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
 		reserve_live_dyn_tag();
 		if (other.var_mode == DYNAMIC) {
-			if (needs_dynamic.get()->value != true_top::T) {
-				purge_from_nd_tags();
-				needs_dynamic.require_val(true_top::T);
-			}
 			var_mode = DYNAMIC;
 			var.deferred_init(other.var);
 			remove_materialized_dyn_live_tag();
 		} else {
+			needs_dynamic.require_val(other.needs_dynamic);
 			// If RHS is static, we do the regular init
 			check_and_init(other.get_as_concrete());
 		}
@@ -166,7 +206,7 @@ public:
 	// Special constructor when the value is an PRVALUE
 	builder_union(const builder_as_const_t<T>& v): var(defer_init()), cval(defer_init()), nd_marker(defer_init()) {
 		// Can still be dynamic, so we will have to check		
-		if (needs_dynamic.get()->value == true_top::T) {
+		if (needs_dynamic.get()->value == builder_union_top::T) {
 			var_mode = DYNAMIC;
 			// Regular defer init the dynamic variable
 			var.deferred_init(v.val);
@@ -190,19 +230,18 @@ public:
 		if (var_mode == STATIC_CONST) {
 			// static const can never be assigned, immediately promote it to DYNAMIC
 			// limit constraints SHOULD throw otherwise we might get stuck in an infinite loop
-			needs_dynamic.require_val(true_top::T);
+			needs_dynamic.require_val(builder_union_top::T);
 			// This assert should never hit
 			assert(false && "Static const can never be assigned");		
 		}
 
 		assign_count++;
 
-		// Check early if variable needs promotion		
+			// Check early if variable needs promotion		
 		if (var_mode == STATIC) {
 			if (assign_count > assign_count_max) {
 				// limit constraints SHOULD throw otherwise we might get stuck in an infinite loop
-				purge_from_nd_tags();
-				needs_dynamic.require_val(true_top::T);
+				needs_dynamic.require_val(builder_union_top::T);
 				// This assert should never hit
 				assert(false && "Static variable hit the max limit");		
 			}			
@@ -210,13 +249,11 @@ public:
 				// This is a contradiction, we can simply 
 				// propogate the information above
 				//needs_dynamic.require_val_no_throw(true_top::T);
-				purge_from_nd_tags();
-				needs_dynamic.require_val(true_top::T);
-				// Return so that the bad implementation doesn't run
-				return *this;
-				// This assert should never hit
+				needs_dynamic.require_val(builder_union_top::T);
+
 				assert(false && "Static variable cannot be assigned from dynamic");	
 			}	
+			needs_dynamic.require_val(other.needs_dynamic);
 			// variable is already static, no need to promote
 			// LHS and RHS are both static, 
 			cval = other.get_as_concrete();
@@ -235,7 +272,7 @@ public:
 	template <typename TO>
 	builder_union& operator=(const dyn_var<TO>& other) {
 		if (var_mode == STATIC_CONST) {
-			needs_dynamic.require_val(true_top::T);
+			needs_dynamic.require_val(builder_union_top::T);
 			assert(false && "Static const can never be assigned");
 		}
 
@@ -243,12 +280,10 @@ public:
 
 		if (var_mode == STATIC) {
 			if (assign_count > assign_count_max) {
-				purge_from_nd_tags();
-				needs_dynamic.require_val(true_top::T);
+				needs_dynamic.require_val(builder_union_top::T);
 				assert(false && "Static variable hit the max limit");
 			}
-			purge_from_nd_tags();
-			needs_dynamic.require_val(true_top::T);
+			needs_dynamic.require_val(builder_union_top::T);
 			return *this;
 		}
 
@@ -327,7 +362,10 @@ template <typename T1, typename T2,  \
 auto bunion_##op_name (const builder_union<T1>& d1, const builder_union<T2>& d2) -> RetType& { \
 	/* The special case is if both sides are static*/ \
 	if (d1.var_mode != builder_union<T1>::DYNAMIC && d2.var_mode != builder_union<T2>::DYNAMIC) { \
-		return *get_invocation_state()->get_arena()->allocate<RetType>(builder_as_const(d1.get_as_concrete() op d2.get_as_concrete())); \
+		auto* result = get_invocation_state()->get_arena()->allocate<RetType>(builder_as_const(d1.get_as_concrete() op d2.get_as_concrete())); \
+		result->needs_dynamic.require_val(d1.needs_dynamic); \
+		result->needs_dynamic.require_val(d2.needs_dynamic); \
+		return *result; \
 	} else if (d1.var_mode != builder_union<T1>::DYNAMIC && d2.var_mode == builder_union<T2>::DYNAMIC) { \
 		return *get_invocation_state()->get_arena()->allocate<RetType>(std::move(d1.get_as_concrete() op d2.var)); \
 	} else if (d1.var_mode == builder_union<T1>::DYNAMIC && d2.var_mode != builder_union<T2>::DYNAMIC) { \

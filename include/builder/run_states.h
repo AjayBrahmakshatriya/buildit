@@ -41,8 +41,9 @@ class run_state;
 class execution_state;
 class invocation_state;
 class builder_context;
-class nd_var_base;
+class nd_node_base;
 class true_top;
+class builder_union_top;
 
 class run_state {
 public:
@@ -129,7 +130,7 @@ public:
 	friend class builder_context;
 	friend tracer::tag tracer::get_offset_in_function(void);
 	friend tracer::tag tracer::get_offset_for_nd_var(void);
-	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+	friend void purge_markers_from_nd_state(const std::vector<builder_union_top*>& marker_values);
 	template <typename T>
 	friend class static_var;
 
@@ -166,7 +167,7 @@ public:
 
 class invocation_state {
 	/* ND_VAR state */
-	std::unordered_map<tracer::tag, std::shared_ptr<nd_var_base>> nd_state_map;
+	std::unordered_map<tracer::tag, std::shared_ptr<nd_node_base>> nd_state_map;
 
 	// Tag factory state
 	tag_factory tag_factory_instance;
@@ -206,7 +207,7 @@ public:
 	template <typename T, typename...Args>
 	friend std::shared_ptr<T> get_or_create_generator(tracer::tag req_tag, Args&&...args);
 
-	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+	friend void purge_markers_from_nd_state(const std::vector<builder_union_top*>& marker_values);
 
 public:
 	dyn_var_arena* get_arena(void) {
@@ -214,7 +215,7 @@ public:
 	}
 };
 
-void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+void purge_markers_from_nd_state(const std::vector<builder_union_top*>& marker_values);
 
 
 static inline run_state* get_run_state(void) {

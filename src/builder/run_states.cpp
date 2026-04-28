@@ -1,4 +1,5 @@
 #include "builder/run_states.h"
+#include "builder/builder_union.h"
 #include "builder/exceptions.h"
 #include "builder/nd_var.h"
 #include "builder/var_snapshots.h"
@@ -6,21 +7,24 @@
 #include <functional>
 namespace builder {
 
+std::vector<builder_union_top*> builder_union_top::changed_nodes;
+
 namespace {
 
-tracer::tag purge_marker_from_tag(const tracer::tag& original, true_top* marker_value, bool purge_next_snapshot) {
+tracer::tag purge_markers_from_tag(const tracer::tag& original, const std::vector<builder_union_top*>& marker_values) {
 	tracer::tag new_tag = original;
-	for (unsigned i = 0; i < new_tag.static_var_snapshots.size(); i++) {
+	for (unsigned i = 0; i < new_tag.static_var_snapshots.size();) {
 		auto marker_snapshot =
-			std::dynamic_pointer_cast<static_var_snapshot<true_top*>>(new_tag.static_var_snapshots[i]);
-		if (!marker_snapshot || marker_snapshot->snapshot != marker_value) {
+			std::dynamic_pointer_cast<static_var_snapshot<builder_union_top*>>(new_tag.static_var_snapshots[i]);
+		if (!marker_snapshot ||
+			std::find(marker_values.begin(), marker_values.end(), marker_snapshot->snapshot) == marker_values.end()) {
+			i++;
 			continue;
 		}
 		new_tag.static_var_snapshots.erase(new_tag.static_var_snapshots.begin() + i);
-		if (purge_next_snapshot && i < new_tag.static_var_snapshots.size()) {
+		if (i < new_tag.static_var_snapshots.size()) {
 			new_tag.static_var_snapshots.erase(new_tag.static_var_snapshots.begin() + i);
 		}
-		break;
 	}
 	new_tag.cached_string = "";
 	new_tag.cached_hash = 0;
@@ -32,8 +36,8 @@ void normalize_live_dyn_vars(std::vector<tracer::tag_id>& live_dyn_vars) {
 	live_dyn_vars.erase(std::unique(live_dyn_vars.begin(), live_dyn_vars.end()), live_dyn_vars.end());
 }
 
-void merge_nd_entries(std::unordered_map<tracer::tag, std::shared_ptr<nd_var_base>>& rewritten,
-		const tracer::tag& new_tag, const std::shared_ptr<nd_var_base>& value) {
+void merge_nd_entries(std::unordered_map<tracer::tag, std::shared_ptr<nd_node_base>>& rewritten,
+		const tracer::tag& new_tag, const std::shared_ptr<nd_node_base>& value) {
 	auto existing = rewritten.find(new_tag);
 	if (existing == rewritten.end()) {
 		rewritten[new_tag] = value;
@@ -48,14 +52,21 @@ void merge_nd_entries(std::unordered_map<tracer::tag, std::shared_ptr<nd_var_bas
 		}
 		return;
 	}
+	auto existing_builder_union_top = std::dynamic_pointer_cast<builder_union_top>(existing->second);
+	auto new_builder_union_top = std::dynamic_pointer_cast<builder_union_top>(value);
+	if (existing_builder_union_top && new_builder_union_top) {
+		if (new_builder_union_top->value == builder_union_top::T) {
+			existing_builder_union_top->merge(builder_union_top::T);
+		}
+		return;
+	}
 
 	assert(existing->second == value && "Cannot merge different nd_var lattice values");
 }
 
 tracer::tag_id rewrite_tag_id_recursive(
 		tracer::tag_id old_id,
-		true_top* marker_value,
-		bool purge_next_snapshot,
+		const std::vector<builder_union_top*>& marker_values,
 		const std::unordered_map<tracer::tag_id, tracer::tag>& old_id_to_tag,
 		tag_factory& new_factory,
 		std::unordered_map<tracer::tag_id, tracer::tag_id>& old_id_to_new_id) {
@@ -69,12 +80,11 @@ tracer::tag_id rewrite_tag_id_recursive(
 		return old_id;
 	}
 
-	tracer::tag rewritten_tag = purge_marker_from_tag(old_tag_it->second, marker_value, purge_next_snapshot);
+	tracer::tag rewritten_tag = purge_markers_from_tag(old_tag_it->second, marker_values);
 	for (auto& live_id : rewritten_tag.live_dyn_vars) {
 		live_id = rewrite_tag_id_recursive(
 			live_id,
-			marker_value,
-			purge_next_snapshot,
+			marker_values,
 			old_id_to_tag,
 			new_factory,
 			old_id_to_new_id);
@@ -256,7 +266,7 @@ void run_state::remove_live_dyn_var(const tracer::tag& t) {
 	}	
 }
 
-void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot) {
+void purge_markers_from_nd_state(const std::vector<builder_union_top*>& marker_values) {
 	auto i_state = get_invocation_state();
 	auto old_factory = i_state->tag_factory_instance;
 	std::unordered_map<tracer::tag_id, tracer::tag> old_id_to_tag;
@@ -270,16 +280,15 @@ void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot
 	for (const auto& entry : old_factory.internal_map) {
 		rewrite_tag_id_recursive(
 			entry.second,
-			marker_value,
-			purge_next_snapshot,
+			marker_values,
 			old_id_to_tag,
 			new_factory,
 			old_id_to_new_id);
 	}
 
-	std::unordered_map<tracer::tag, std::shared_ptr<nd_var_base>> rewritten_nd_state;
+	std::unordered_map<tracer::tag, std::shared_ptr<nd_node_base>> rewritten_nd_state;
 	for (auto &entry: i_state->nd_state_map) {
-		tracer::tag new_tag = purge_marker_from_tag(entry.first, marker_value, purge_next_snapshot);
+		tracer::tag new_tag = purge_markers_from_tag(entry.first, marker_values);
 		for (auto& live_id : new_tag.live_dyn_vars) {
 			auto remapped = old_id_to_new_id.find(live_id);
 			if (remapped != old_id_to_new_id.end()) {
@@ -295,8 +304,6 @@ void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot
 	i_state->tag_factory_instance = std::move(new_factory);
 	i_state->nd_state_map.swap(rewritten_nd_state);
 	get_run_state()->live_dyn_vars.clear();
-
-	get_run_state()->factory_frozen = true;
 }
 
 }

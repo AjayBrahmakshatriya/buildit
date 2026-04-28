@@ -7,6 +7,7 @@ namespace builder {
 
 static bool is_factory_frozen(void);
 class true_top;
+class builder_union_top;
 
 class tag_factory {
 	std::unordered_map<tracer::tag, tracer::tag_id> internal_map;
@@ -22,7 +23,7 @@ public:
 	}
 	tracer::tag_id create_tag_id (const tracer::tag& t) { return create_tag_id_helper(t); }
 
-	friend void purge_marker_from_nd_state(true_top* marker_value, bool purge_next_snapshot);
+	friend void purge_markers_from_nd_state(const std::vector<builder_union_top*>& marker_values);
 };
 
 }
