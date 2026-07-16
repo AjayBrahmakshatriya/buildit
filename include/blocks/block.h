@@ -44,6 +44,13 @@ std::shared_ptr<T> clone_obj(T* t) {
 }
 
 template <typename T>
+std::shared_ptr<T> clone_expr(T* t) {
+	auto np = clone_obj(t);
+	np->computed_type = clone(t->computed_type);
+	return np;
+}
+
+template <typename T>
 class block_metadata_impl;
 
 class block_metadata : public std::enable_shared_from_this<block_metadata> {

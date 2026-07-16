@@ -7,7 +7,7 @@ namespace builder {
 // A single templated constructor to create expr blocks of any type
 // This handles removing childred from UC, adding new expresisons to UC 
 // and caching for runs, the children, aren't set but are removed from UC
-template <typename T>
+template <typename T, typename ET>
 typename T::Ptr create_expr(const std::vector<block::expr::Ptr> &children) {
 	// Caching happens here
 	if (get_run_state()->is_catching_up()) {
@@ -19,6 +19,8 @@ typename T::Ptr create_expr(const std::vector<block::expr::Ptr> &children) {
 	tracer::tag offset = tracer::get_offset_in_function();	
 	typename T::Ptr expr = std::make_shared<T>();
 	expr->static_offset = offset;
+	// May be NULL if ET is generic. This will be handled by caller
+	expr->computed_type = type_extractor<ET>::extract_type();
 	// The other members will be set by the caller
 	get_run_state()->add_node_to_sequence(expr);	
 	// For caching
@@ -33,7 +35,7 @@ block::expr::Ptr to_expr(const dyn_var_base& d);
 
 template <typename T>
 typename std::enable_if<std::is_integral<T>::value, block::expr::Ptr>::type to_expr(const T& v) {
-	auto e = create_expr<block::int_const>({});
+	auto e = create_expr<block::int_const, T>({});
 	e->value = v;
 	e->is_64bit = sizeof(T) > 4;
 	return e;
@@ -50,7 +52,7 @@ block::expr::Ptr to_expr(const std::vector<T>& v) {
 	for (auto x: v) {
 		argv.push_back(to_expr(x));
 	}	
-	auto e = create_expr<block::initializer_list_expr>(argv);
+	auto e = create_expr<block::initializer_list_expr, T[]>(argv);
 	e->elems = argv;
 	return e;
 	

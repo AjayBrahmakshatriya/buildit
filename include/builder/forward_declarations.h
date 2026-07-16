@@ -60,6 +60,8 @@ struct as_member {
 
 class type;
 class generic;
+block::type::Ptr compute_binary_op_type(block::type::Ptr t1, block::type::Ptr t2, std::string op);
+block::type::Ptr compute_unary_op_type(block::type::Ptr t1, std::string op);
 // with type is defined in generics
 struct with_type;
 

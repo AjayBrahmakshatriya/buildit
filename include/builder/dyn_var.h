@@ -36,14 +36,19 @@ protected:
 	block::decl_stmt::Ptr block_decl_stmt;
 	dyn_var_base* parent_var;
 	std::string member_name;
+
 	block::expr::Ptr block_expr;
+
 	// Required for custom types
 	std::vector<block::var::Ptr> user_defined_members;
 	int member_counter = 0;
 
+
 public:
 	// Member functions user can call
 	void set_type(type t);
+	type get_type(void) const;
+	block::type::Ptr get_type_inner(void) const;
 
 public:
 	~dyn_var_base() = default;
@@ -100,14 +105,15 @@ private:
 				block_var->var_name = member_name;
 				parent_var->user_defined_members.push_back(block_var);
 			}
-			// Discard the created block_var
-			block_var = nullptr;
+			// Do not discard the created block_var, since we use it to get the type
+			// of the member
+			// block_var = nullptr;
 		} else {
 			block_var->var_name = vname;	
 			var_mode = standalone_var;
 		}
 
-		if (is_under_run() && block_var) {
+		if (is_under_run() && block_var && !supplied_parent) {
 			// If a variable is created outside of a run, 
 			// it doesn't need a static tag
 			tracer::tag offset = tracer::get_offset_in_function();
@@ -239,7 +245,10 @@ public:
 	dyn_var<T>& operator= (const dyn_var_impl<T>& other) {
 		auto e1 = to_expr(*this);
 		auto e2 = to_expr(other);
-		auto e = create_expr<block::assign_expr>({e1, e2});
+		auto e = create_expr<block::assign_expr, T>({e1, e2});
+		if (e->computed_type == nullptr) {
+			e->computed_type = this->get_type_inner();
+		}	
 		e->var1 = e1;
 		e->expr1 = e2;
 		return *get_invocation_state()->get_arena()->allocate<dyn_var<T>>(e);
@@ -248,7 +257,10 @@ public:
 	dyn_var<T>& operator= (const TO& other) {
 		auto e1 = to_expr(*this);
 		auto e2 = to_expr(other);
-		auto e = create_expr<block::assign_expr>({e1, e2});
+		auto e = create_expr<block::assign_expr, T>({e1, e2});
+		if (e->computed_type == nullptr) {
+			e->computed_type = this->get_type_inner();
+		}
 		e->var1 = e1;
 		e->expr1 = e2;
 		return *get_invocation_state()->get_arena()->allocate<dyn_var<T>>(e); 
@@ -261,7 +273,10 @@ public:
 		using RetType = dyn_var<op_sq_bkt_ret_provider_t<TC>>;
 		auto e1 = to_expr(*this);
 		auto e2 = to_expr(other);
-		auto e = create_expr<block::sq_bkt_expr>({e1, e2});	
+		auto e = create_expr<block::sq_bkt_expr, op_sq_bkt_ret_provider_t<TC>>({e1, e2});	
+		if (e->computed_type == nullptr) {
+			e->computed_type = compute_unary_op_type(e1->computed_type, "*");
+		}
 		e->var_expr = e1;
 		e->index = e2;
 		return *get_invocation_state()->get_arena()->allocate<RetType>(e);
@@ -292,7 +307,11 @@ public:
 		std::vector<block::expr::Ptr> argv = {to_expr(args)...};
 		auto args_copy = argv;
 		args_copy.push_back(e1);	
-		auto e = create_expr<block::function_call_expr>(args_copy);
+		auto e = create_expr<block::function_call_expr, op_fcall_ret_provider_t<TC>>(args_copy);
+		// Return types for extern function calls shouldn't be generic
+		if (e->computed_type == nullptr) {
+			assert(false && "Return type empty on external function call");
+		}
 		e->expr1 = e1;
 		e->args = std::move(argv);
 		return *get_invocation_state()->get_arena()->allocate<RetType>(e);
@@ -336,6 +355,8 @@ public:
 		}
 		block_var->setMetadata<std::vector<std::string>>("attributes", attrs);
 	}
+	
+	
 public:
 	// static helper functions associated with this dyn_var type
 	static block::type::Ptr create_block_type(void) {

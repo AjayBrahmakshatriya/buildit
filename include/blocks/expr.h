@@ -10,6 +10,9 @@ namespace block {
 class expr : public block {
 public:
 	typedef std::shared_ptr<expr> Ptr;
+
+	type::Ptr computed_type;
+
 	virtual void dump(std::ostream &, int) override;
 	virtual void accept(block_visitor *a) override {
 		a->visit(self<expr>());
@@ -24,9 +27,11 @@ bool binary_is_same(std::shared_ptr<T> first, block::Ptr other);
 
 template <typename T>
 bool unary_is_same(std::shared_ptr<T> first, block::Ptr other) {
-	if (!isa<unary_expr>(other))
+	if (!isa<T>(other))
 		return false;
 	typename T::Ptr other_expr = to<T>(other);
+	if (!(first->computed_type->is_same(other_expr->computed_type))) 
+		return false;
 	if (!(first->expr1->is_same(other_expr->expr1)))
 		return false;
 	return true;
@@ -36,6 +41,8 @@ bool binary_is_same(std::shared_ptr<T> first, block::Ptr second) {
 	if (!isa<T>(second))
 		return false;
 	typename T::Ptr other_expr = to<T>(second);
+	if (!(first->computed_type->is_same(other_expr->computed_type))) 
+		return false;
 	if (!(first->expr1->is_same(other_expr->expr1)))
 		return false;
 	if (!(first->expr2->is_same(other_expr->expr2)))
@@ -74,14 +81,14 @@ public:
 
 template <typename T>
 std::shared_ptr<T> unary_clone_helper(T* t) {
-	auto np = clone_obj(t);
+	auto np = clone_expr(t);
 	np->expr1 = clone(t->expr1);
 	return np;
 }
 
 template <typename T>
 std::shared_ptr<T> binary_clone_helper(T* t) {
-	auto np = clone_obj(t);
+	auto np = clone_expr(t);
 	np->expr1 = clone(t->expr1);
 	np->expr2 = clone(t->expr2);
 	return np;
@@ -409,6 +416,8 @@ public:
 		if (!isa<var_expr>(other))
 			return false;
 		var_expr::Ptr other_expr = to<var_expr>(other);
+		if (!(computed_type->is_same(other_expr->computed_type))) 
+			return false;
 		if (!var1->is_same(other_expr->var1))
 			return false;
 		if (template_args.size() != other_expr->template_args.size())
@@ -420,7 +429,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		// Vars are special cases and should not be cloned
 		// This is to avoid problems where vars are compared by pointers
 		np->var1 = var1;
@@ -461,12 +470,14 @@ public:
 		if (!isa<int_const>(other))
 			return false;
 		int_const::Ptr other_expr = to<int_const>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (value != other_expr->value)
 			return false;
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->value = value;
 		np->is_64bit = is_64bit;
 		return np;
@@ -486,12 +497,14 @@ public:
 		if (!isa<double_const>(other))
 			return false;
 		double_const::Ptr other_expr = to<double_const>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (value != other_expr->value)
 			return false;
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->value = value;
 		return np;
 	}
@@ -511,12 +524,14 @@ public:
 		if (!isa<float_const>(other))
 			return false;
 		float_const::Ptr other_expr = to<float_const>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (value != other_expr->value)
 			return false;
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->value = value;
 		return np;
 	}
@@ -536,12 +551,14 @@ public:
 		if (!isa<string_const>(other))
 			return false;
 		string_const::Ptr other_expr = to<string_const>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (value != other_expr->value)
 			return false;
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->value = value;
 		return np;
 	}
@@ -562,6 +579,8 @@ public:
 		if (!isa<assign_expr>(other))
 			return false;
 		assign_expr::Ptr other_expr = to<assign_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!var1->is_same(other_expr->var1))
 			return false;
 		if (!expr1->is_same(other_expr->expr1))
@@ -569,7 +588,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->var1 = clone(var1);
 		np->expr1 = clone(expr1);
 		return np;
@@ -589,6 +608,8 @@ public:
 		if (!isa<sq_bkt_expr>(other))
 			return false;
 		sq_bkt_expr::Ptr other_expr = to<sq_bkt_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!var_expr->is_same(other_expr->var_expr))
 			return false;
 		if (!index->is_same(other_expr->index))
@@ -596,7 +617,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->var_expr = clone(var_expr);
 		np->index = clone(index);
 		return np;
@@ -617,6 +638,8 @@ public:
 		if (!isa<function_call_expr>(other))
 			return false;
 		function_call_expr::Ptr other_expr = to<function_call_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!expr1->is_same(other_expr->expr1))
 			return false;
 		if (args.size() != other_expr->args.size())
@@ -628,7 +651,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->expr1 = clone(expr1);
 		for (auto arg: args) {
 			np->args.push_back(clone(arg));
@@ -650,6 +673,8 @@ public:
 		if (!isa<initializer_list_expr>(other))
 			return false;
 		initializer_list_expr::Ptr other_expr = to<initializer_list_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (elems.size() != other_expr->elems.size())
 			return false;
 		for (unsigned int i = 0; i < elems.size(); i++) {
@@ -659,7 +684,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		for (auto elem: elems) {
 			np->elems.push_back(clone(elem));
 		}
@@ -698,6 +723,8 @@ public:
 		if (!isa<foreign_expr<T>>(other))
 			return false;
 		foreign_expr<T>::Ptr other_expr = to<foreign_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		// We assume that T has == operator and that is the best we can
 		// check
 		if (!(inner_expr == other_expr->inner_expr))
@@ -705,7 +732,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->inner_expr = inner_expr;
 		return np;
 	}
@@ -725,6 +752,8 @@ public:
 		if (!isa<member_access_expr>(other))
 			return false;
 		member_access_expr::Ptr other_expr = to<member_access_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!other_expr->parent_expr->is_same(parent_expr))
 			return false;
 		if (other_expr->member_name != member_name)
@@ -732,7 +761,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->parent_expr = clone(parent_expr);
 		np->member_name = member_name;
 		return np;
@@ -750,12 +779,14 @@ public:
 		if (!isa<addr_of_expr>(other))
 			return false;
 		addr_of_expr::Ptr other_expr = to<addr_of_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!other_expr->expr1->is_same(expr1))
 			return false;
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->expr1 = clone(expr1);
 		return np;
 	}
@@ -776,6 +807,8 @@ public:
 		if (!isa<cast_expr>(other))
 			return false;
 		cast_expr::Ptr other_expr = to<cast_expr>(other);
+		if (!computed_type->is_same(other_expr->computed_type))
+			return false;
 		if (!other_expr->expr1->is_same(expr1))
 			return false;
 		if (!other_expr->type1->is_same(type1))
@@ -783,7 +816,7 @@ public:
 		return true;
 	}
 	virtual block::Ptr clone_impl(void) override {
-		auto np = clone_obj(this);
+		auto np = clone_expr(this);
 		np->expr1 = clone(expr1);
 		np->type1 = clone(type1);
 		return np;

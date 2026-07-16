@@ -33,19 +33,27 @@ struct allowed_types<T1, dyn_var<T2>> {
 };
 
 
-template <typename T, typename T1, typename T2>
-block::expr::Ptr binary_expr_helper(const T1& d1, const T2& d2) {
+template <typename T, typename ET, typename T1, typename T2>
+block::expr::Ptr binary_expr_helper(const T1& d1, const T2& d2, std::string op) {
 	auto e1 = to_expr(d1);
 	auto e2 = to_expr(d2);
-	auto e = create_expr<T>({e1, e2});
+	auto e = create_expr<T, ET>({e1, e2});
+	// At this point if ET is generic, e->computed type would be NULL, use runtime 
+	// type computation to figure out the type
+	if (e->computed_type == nullptr) {
+		e->computed_type = compute_binary_op_type(e1->computed_type, e2->computed_type, op);
+	}
 	e->expr1 = e1;
 	e->expr2 = e2;
 	return e;	
 }
-template <typename T, typename T1>
-block::expr::Ptr unary_expr_helper(const T1& d1) {
+template <typename T, typename ET, typename T1>
+block::expr::Ptr unary_expr_helper(const T1& d1, std::string op) {
 	auto e1 = to_expr(d1);
-	auto e = create_expr<T>({e1});
+	auto e = create_expr<T, ET>({e1});
+	if (e->computed_type == nullptr) {
+		e->computed_type = compute_unary_op_type(e1->computed_type, op);
+	}
 	e->expr1 = e1;
 	return e;	
 }
@@ -54,7 +62,8 @@ block::expr::Ptr unary_expr_helper(const T1& d1) {
 template <typename T1, typename T2, typename V = typename allowed_types<T1, T2>::type,  \
 	typename RetType = dyn_var<decltype(stripped<T1>::val() op stripped<T2>::val())>> \
 auto operator op (const T1& d1, const T2& d2) -> RetType& { \
-	return *get_invocation_state()->get_arena()->allocate<RetType>(binary_expr_helper<block::op_class>(d1, d2)); \
+	using RetTypeInner = decltype(stripped<T1>::val() op stripped<T2>::val()); \
+	return *get_invocation_state()->get_arena()->allocate<RetType>(binary_expr_helper<block::op_class, RetTypeInner>(d1, d2, #op)); \
 } 
 
 // This uses declval and not stripped, because we don't want to strip too 
@@ -62,7 +71,8 @@ auto operator op (const T1& d1, const T2& d2) -> RetType& { \
 #define UNARY_OPERATOR(op, op_class) \
 template <typename T1, typename RetType = dyn_var<decltype(op std::declval<T1&>())>> \
 auto operator op (const dyn_var<T1>& d1) -> RetType& { \
-	return *get_invocation_state()->get_arena()->allocate<RetType>(unary_expr_helper<block::op_class>(d1)); \
+	using RetTypeInner = decltype(op std::declval<T1&>()); \
+	return *get_invocation_state()->get_arena()->allocate<RetType>(unary_expr_helper<block::op_class, RetTypeInner>(d1, #op)); \
 } 
 
 // Binary operators
@@ -157,7 +167,8 @@ dyn_var<T1>& operator ^= (dyn_var<T1>& d1, const T2& d2) {
 // by comparing types while assignment, but for now, we will keep this simple
 template <typename T, typename T2>
 dyn_var<T>& cast_to(const T2& d1) {
-	auto ce = block::to<block::cast_expr>(unary_expr_helper<block::cast_expr>(d1));
+	// T cannot be generic, so the unary_expr_helper will never call compute
+	auto ce = block::to<block::cast_expr>(unary_expr_helper<block::cast_expr, T>(d1, "_"));
 	ce->type1 = type_extractor<T>::extract_type();
 	return *get_invocation_state()->get_arena()->allocate<dyn_var<T>>(ce); 
 }

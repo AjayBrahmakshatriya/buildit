@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
 	builder::builder_context context;
 	context.run_rce = true;
 	auto ast = context.extract_function_ast(bar, "bar");
+	ast->dump(std::cout, 0);
 	block::c_code_generator::generate_code(ast, std::cout, 0);
 	return 0;
 }

@@ -105,7 +105,6 @@ type create_type(void) {
 	return type(type_extractor<T>::extract_type());
 }
 
-
 type array_of(const type &t, int size = -1);
 type remove_array(const type &t);
 type remove_array(const type &t, int& size);
@@ -114,6 +113,10 @@ bool is_array(const type &t);
 type pointer_of(const type &t);
 bool is_pointer(const type &t);
 type remove_pointer(const type &t);
+
+type reference_of(const type &t);
+bool is_reference(const type &t);
+type remove_reference(const type &t);
 
 }
 

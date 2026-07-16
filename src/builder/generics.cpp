@@ -41,4 +41,17 @@ type remove_pointer(const type &t) {
 }
 
 
+type reference_of(const type &t) {
+	block::reference_type::Ptr rt = std::make_shared<block::reference_type>();
+	rt->referenced_type = t.enclosed_type;
+	return type(rt);
+}
+bool is_reference(const type &t) {
+	return block::isa<block::reference_type>(t.enclosed_type);
+}
+
+type remove_reference(const type &t) {
+	return type(block::to<block::reference_type>(t.enclosed_type)->referenced_type);
+}
+
 }
